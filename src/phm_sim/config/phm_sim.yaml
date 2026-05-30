@@ -1,0 +1,30 @@
+/**:
+  ros__parameters:
+    # Embedding dimensionality. Match whatever your policy's hidden-state dim is.
+    # The OOD node accepts any dim; 64 is the default for phm_sim smoke tests.
+    dim: 64
+
+    # Number of in-distribution frames before the stream transitions to the OOD
+    # (collapse) phase. At 10 Hz the default 100 frames gives 10 s of healthy
+    # signal, then OOD fires, giving phm_ood and phm_arbiter time to build their
+    # rolling windows and calibrated threshold before the fault is injected.
+    n_in_dist: 100
+
+    # Gaussian std-dev for the in-distribution phase. The rolling trace-of-variance
+    # over a window of size w is approximately dim * in_dist_scale^2, so the spread
+    # is well above the calibrated threshold (set at the 1st percentile of healthy).
+    in_dist_scale: 1.0
+
+    # Gaussian std-dev for the OOD phase. Set 100x smaller than in_dist_scale so
+    # the rolling spread collapses by a factor of 10000, well below threshold.
+    ood_scale: 0.01
+
+    # Publish rate. 10 Hz matches a typical policy inference rate in simulation.
+    publish_rate_hz: 10.0
+
+    # Policy identifier forwarded verbatim to PolicyEmbedding.policy_id. Allows
+    # the OOD node and arbiter to filter by policy when multiple policies run.
+    policy_id: "phm_sim"
+
+    # RNG seed for reproducible streams in CI and offline tests.
+    seed: 42

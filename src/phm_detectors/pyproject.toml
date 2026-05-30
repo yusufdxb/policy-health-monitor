@@ -1,0 +1,18 @@
+# ament_python package: packaging metadata lives in setup.py + package.xml.
+# This file carries only tool configuration. A [project]/[build-system] table
+# here makes colcon's setup.py introspection emit non-literal reprs
+# (e.g. <SpecifierSet('>=3.10')>) that break ast.literal_eval during
+# `colcon build`, so it is intentionally omitted.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Exclude ROS pytest plugins that require a live ROS graph and pull in deps
+# (pyyaml, launch) not present in the pure-Python venv.
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]

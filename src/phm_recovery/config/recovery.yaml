@@ -1,0 +1,15 @@
+/**:
+  ros__parameters:
+    recovery:
+      # Master enable. Set to true before deploying. False = no actuation (safe default).
+      enabled: false
+
+      # Minimum seconds between repeated HOLD/STOP_AND_HOLD for the same fault_key.
+      # Damps flapping: a fault that clears and immediately re-fires cannot re-fire
+      # the same hold command until cooldown_seconds have elapsed.
+      # Ported from HELIX helix_recovery/recovery_node.py:68 (cooldown_seconds param).
+      cooldown_seconds: 5.0
+
+      # Rate at which zero-velocity Twist is re-published while hold is active.
+      # 20 Hz: same as HELIX recovery_node.py PUBLISH_HZ.
+      publish_hz: 20.0

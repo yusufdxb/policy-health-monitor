@@ -1,0 +1,31 @@
+/**:
+  ros__parameters:
+    # Topic to subscribe to for PolicyEmbedding messages.
+    embedding_topic: "/policy/embedding"
+
+    # Rolling-spread window length (number of consecutive frames).
+    # Minimum 2. Larger windows are smoother but slower to respond.
+    window: 30
+
+    # Pre-calibrated spread threshold. spread < threshold flags OOD.
+    # Run phm_core.calibration.calibrate_threshold on real in-distribution
+    # data to obtain this value, then set it here or via calibration_file.
+    # Default 0.0 means the detector fires only after calibration is loaded.
+    threshold: 0.0
+
+    # Optional path to a .npz file with key 'threshold'.
+    # If non-empty, this overrides the 'threshold' parameter above.
+    # Example: "/home/yusuf/Projects/policy-health-monitor/calibration/phoenix_threshold.npz"
+    calibration_file: ""
+
+    # Consecutive violating frames required before the verdict flips to
+    # violating=True. Must be >= 1. Mirrors BlackBoxRS min_consecutive_samples=2.
+    hysteresis_count: 3
+
+    # Frequency gate: compute rolling spread every N frames.
+    # 1 = every frame (default). Set higher to reduce CPU on slow systems.
+    compute_every: 1
+
+    # Expected embedding dimension for input validation. 0 = skip validation.
+    # Set to the policy's hidden state dim (e.g. 512 for phoenix / supercombo).
+    embed_dim: 0

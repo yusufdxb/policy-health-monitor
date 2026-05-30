@@ -1,0 +1,31 @@
+from glob import glob
+
+from setuptools import find_packages, setup
+
+package_name = "phm_ood"
+
+setup(
+    name=package_name,
+    version="0.1.0",
+    packages=find_packages(exclude=["test", "tests"]),
+    data_files=[
+        ("share/ament_index/resource_index/packages",
+         [f"resource/{package_name}"]),
+        (f"share/{package_name}", ["package.xml"]),
+        (f"share/{package_name}/config", glob("config/*.yaml")),
+        (f"share/{package_name}/launch", glob("launch/*.py")),
+    ],
+    install_requires=["setuptools"],
+    zip_safe=True,
+    maintainer="Yusuf Guenena",
+    maintainer_email="youssefguenena@gmail.com",
+    description=(
+        "Rolling-spread OOD detector lifecycle node for the Policy Health Monitor."
+    ),
+    license="MIT",
+    entry_points={
+        "console_scripts": [
+            f"phm_ood_node = {package_name}.main:main",
+        ],
+    },
+)

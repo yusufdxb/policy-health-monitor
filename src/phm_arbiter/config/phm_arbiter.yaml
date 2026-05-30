@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    # Age threshold in seconds. A DetectorVerdict older than this becomes
+    # DEGRADED with reason "stale:<source>" (never silently dropped).
+    staleness_sec: 1.0
+
+    # Arbitration timer period in seconds. 0.05 = 20 Hz.
+    timer_period: 0.05

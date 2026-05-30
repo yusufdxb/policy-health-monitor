@@ -1,0 +1,30 @@
+/**:
+  ros__parameters:
+    # Topics to monitor for frequency drops.
+    freq_topics:
+      - /scan
+      - /odom
+      - /imu/data
+
+    # Frequency must stay above baseline * (1 - tolerance/100) to be healthy.
+    freq_tolerance_percent: 20.0
+
+    # Hysteresis: consecutive violations before frequency alert fires.
+    freq_min_consecutive: 2
+
+    # Static upper bounds for system metrics.
+    threshold_cpu_limit: 80.0        # cpu_percent
+    threshold_mem_limit: 85.0        # memory_percent
+    threshold_temp_limit: 85.0       # gpu_temp_c
+
+    # Hysteresis: consecutive violations before threshold alert fires.
+    threshold_min_consecutive: 2
+
+    # Silence window: topic is considered dead after this many seconds.
+    dead_timeout_sec: 5.0
+
+    # Topics to monitor for dead-topic.
+    dead_topics:
+      - /scan
+      - /odom
+      - /imu/data
