@@ -132,6 +132,43 @@ class TestCooldown:
         assert result.status == "ACCEPTED"  # no cooldown on REWIND
 
 
+class TestCooldownCouplesToActuation:
+    """LOCKED decision 5: cooldown damps NEW holds only; a continued hold is
+    cooldown-exempt and is never released by the cooldown gate.
+    """
+
+    def test_continued_hold_within_cooldown_keeps_publishing(self):
+        """A re-asserted hold within the cooldown window, when the hold is
+        already active, stays publishing (cooldown-exempt continuation).
+        """
+        env = _envelope(cooldown=5.0)
+        first = env.evaluate(ACTION_STOP_AND_HOLD, "fault_a", now=0.0)
+        assert first.publish is True
+        # Re-assert within cooldown, but the hold is ALREADY active: continuation.
+        second = env.evaluate(
+            ACTION_STOP_AND_HOLD, "fault_a", now=2.0, hold_already_active=True
+        )
+        assert second.status == "ACCEPTED"
+        assert second.publish is True  # ongoing hold keeps publishing, NOT released
+
+    def test_new_hold_within_cooldown_is_suppressed(self):
+        """A NEW hold (none active yet) within cooldown is still damped."""
+        env = _envelope(cooldown=5.0)
+        env.evaluate(ACTION_STOP_AND_HOLD, "fault_a", now=0.0)
+        # hold_already_active defaults False -> a NEW assertion -> cooldown damps it.
+        second = env.evaluate(ACTION_STOP_AND_HOLD, "fault_a", now=2.0)
+        assert second.status == "SUPPRESSED_COOLDOWN"
+        assert second.publish is False
+
+    def test_repeated_intervene_continuation_never_releases(self):
+        """Many re-asserts within cooldown, all as continuations, keep the hold."""
+        env = _envelope(cooldown=5.0)
+        env.evaluate(ACTION_HOLD, "fault_a", now=0.0)
+        for t in (0.5, 1.0, 1.5, 2.0, 2.5):
+            r = env.evaluate(ACTION_HOLD, "fault_a", now=t, hold_already_active=True)
+            assert r.publish is True, f"continuation at t={t} must keep publishing"
+
+
 class TestResumeExemption:
     """RESUME must never be blocked by cooldown. HELIX recovery_node.py:53."""
 

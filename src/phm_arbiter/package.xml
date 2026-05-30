@@ -7,9 +7,10 @@
   <maintainer email="youssefguenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
+  <buildtool_depend>ament_python</buildtool_depend>
+
   <depend>rclpy</depend>
   <depend>phm_msgs</depend>
-  <depend>std_msgs</depend>
 
   <test_depend>pytest</test_depend>
 

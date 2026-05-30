@@ -4,7 +4,7 @@ Verifies:
 - STATE_STOP -> STOP_AND_HOLD, hold_active=True.
 - STATE_INTERVENE + ACTION_HOLD -> HOLD, hold_active=True.
 - STATE_INTERVENE + ACTION_REWIND -> REWIND, hold_active=True.
-- STATE_INTERVENE + ACTION_LOG_ONLY -> LOG_ONLY, preserves existing hold.
+- STATE_INTERVENE + ACTION_LOG_ONLY -> still HOLD (decision 4: INTERVENE always holds).
 - STATE_OK / STATE_DEGRADED -> clear hold (ACTION_NONE, hold_active=False).
 - Hold stays active through consecutive STOP messages.
 - RewindHook: default (no callback) logs a warning; registered callback is called.
@@ -69,12 +69,15 @@ class TestStateMappings:
         assert d.action == ACTION_REWIND
         assert d.hold_active is True
 
-    def test_intervene_log_only_no_new_hold(self):
-        """INTERVENE with LOG_ONLY does not start a hold (if none was active)."""
+    def test_intervene_log_only_still_holds(self):
+        """LOCKED decision 4: STATE_INTERVENE always actuates at least a HOLD,
+        even when suggested_action is LOG_ONLY. A low suggested_action cannot
+        downgrade an INTERVENE below a hold (an INTERVENE with no hold was the bug).
+        """
         m = self._mapper()
         d = m.map(STATE_INTERVENE, ACTION_LOG_ONLY, "threshold:cpu", "cpu 90%")
-        assert d.action == ACTION_LOG_ONLY
-        assert d.hold_active is False  # was not active before
+        assert d.action == ACTION_HOLD
+        assert d.hold_active is True
 
     def test_intervene_log_only_preserves_existing_hold(self):
         """INTERVENE/LOG_ONLY preserves a hold started by a prior STOP."""

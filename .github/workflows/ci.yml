@@ -30,15 +30,15 @@ jobs:
       image: ros:humble
     steps:
       - uses: actions/checkout@v5
-      - name: Build phm_msgs and phm_core
+      - name: Build all packages
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
-          colcon build --packages-select phm_msgs phm_core
+          colcon build
       - name: Run package tests
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          colcon test --packages-select phm_msgs phm_core
+          colcon test
           colcon test-result --verbose

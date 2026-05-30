@@ -6,10 +6,11 @@ Coverage targets per spec section 3.3:
 - No verdicts -> OK
 - Single INTERVENE verdict -> INTERVENE
 - STOP beats INTERVENE beats DEGRADED (worst-wins)
-- Stale verdict -> DEGRADED with reason "stale:<source>"
+- Stale NON-violating verdict -> DEGRADED with reason "stale:<source>"
+- Stale VIOLATING verdict -> keeps its own severity (SAFE contract, decision 1)
 - Tie-breaking: equal state, higher score wins
 - reason and source propagate from the winning verdict
-- suggested_action clamped to ARBITER_ALLOWLIST (REWIND excluded)
+- suggested_action clamped to ARBITER_ALLOWLIST (REWIND now passes through, decision 4)
 - Non-violating verdict contributes nothing
 - Mixed stale + violating: correct winner
 - staleness_sec edge cases (exact boundary, just inside, just outside)
@@ -204,8 +205,23 @@ def test_three_sources_all_different_worst_wins():
 # ---------------------------------------------------------------------------
 
 
-def test_stale_verdict_becomes_degraded():
+def test_stale_violating_does_not_deescalate():
+    """SAFE contract (LOCKED decision 1): staleness never de-escalates a
+    violating verdict. A stale + violating INTERVENE-band score (0.65) keeps at
+    least its own live severity (INTERVENE), it is NOT downgraded to DEGRADED.
+    """
     v = make_verdict("phm_ood", score=0.65, violating=True, reason="ood", age=2.0)
+    result = arbitrate([v], now=NOW, staleness_sec=1.0)
+    assert result.state == STATE_INTERVENE  # was DEGRADED under the old unsafe rule
+    assert result.score == pytest.approx(0.65)  # severity preserved, not floored to 0.25
+    assert "stale:phm_ood" in result.reason
+
+
+def test_stale_non_violating_becomes_degraded():
+    """The legitimate stale case: a stale NON-violating verdict floors at
+    DEGRADED with reason 'stale:<source>' (never silently dropped).
+    """
+    v = make_verdict("phm_ood", score=0.05, violating=False, reason="ok", age=2.0)
     result = arbitrate([v], now=NOW, staleness_sec=1.0)
     assert result.state == STATE_DEGRADED
     assert "stale:phm_ood" in result.reason
@@ -253,9 +269,14 @@ def test_multiple_stale_sources():
         make_verdict("src_b", score=0.9, violating=True, reason="bad", age=5.0),
     ]
     result = arbitrate(verdicts, now=NOW, staleness_sec=1.0)
-    # Both are stale; both become DEGRADED candidates; src_b had higher original
-    # score but stale candidates all get _STALE_SCORE, so we still get DEGRADED.
-    assert result.state == STATE_DEGRADED
+    # Both are stale. src_a is non-violating -> floors at DEGRADED (score 0.25).
+    # src_b is stale + VIOLATING with score 0.9: SAFE contract (LOCKED decision 1)
+    # keeps its own STOP-level severity, it is NOT downgraded. Worst-wins picks
+    # src_b -> STATE_STOP, score preserved at 0.9.
+    assert result.state == STATE_STOP
+    assert result.source == "src_b"
+    assert result.score == pytest.approx(0.9)
+    assert result.reason == "stale:src_b"
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +294,19 @@ def test_exactly_at_staleness_boundary_is_stale():
 
 
 def test_just_over_staleness_boundary_is_stale():
+    """Just-over-boundary is stale: reason flips to 'stale:<source>'. But under
+    the SAFE contract (LOCKED decision 1) a stale + violating score=0.9 keeps its
+    STOP severity, staleness only changes the reason, not the de-escalation.
+    """
     v = make_verdict("src", score=0.9, violating=True, reason="bad", age=1.001)
+    result = arbitrate([v], now=NOW, staleness_sec=1.0)
+    assert result.state == STATE_STOP  # severity preserved, not downgraded
+    assert result.reason == "stale:src"
+
+
+def test_just_over_boundary_non_violating_is_degraded():
+    """Stale + non-violating just over the boundary floors at DEGRADED."""
+    v = make_verdict("src", score=0.05, violating=False, reason="ok", age=1.001)
     result = arbitrate([v], now=NOW, staleness_sec=1.0)
     assert result.state == STATE_DEGRADED
     assert result.reason == "stale:src"
@@ -344,12 +377,15 @@ def test_source_propagates_verbatim():
 # ---------------------------------------------------------------------------
 
 
-def test_rewind_clamped_to_none():
-    """REWIND is not in the arbiter allowlist; must be clamped to ACTION_NONE."""
+def test_rewind_passes_through():
+    """REWIND seam (LOCKED decision 4): the arbiter now FORWARDS REWIND unchanged
+    so the recovery layer can act on it. It must NOT be clamped to ACTION_NONE
+    (clamping made an INTERVENE+REWIND request a silent no-op end-to-end).
+    """
     v = make_verdict("phm_ood", score=0.65, violating=True, reason="ood",
                      suggested_action=ACTION_REWIND)
     result = arbitrate([v], now=NOW)
-    assert result.suggested_action == ACTION_NONE
+    assert result.suggested_action == ACTION_REWIND
 
 
 def test_valid_actions_pass_through():
@@ -498,7 +534,17 @@ def test_zero_staleness_makes_fresh_verdict_stale():
 
 def test_tiny_staleness_makes_aged_verdict_stale():
     v = make_verdict("src", score=0.9, violating=True, reason="bad", age=0.001)
-    # staleness_sec=0.0: 0.001 > 0.0 -> stale
+    # staleness_sec=0.0: 0.001 > 0.0 -> stale. Reason flips to 'stale:src', but
+    # the SAFE contract (LOCKED decision 1) keeps the STOP severity for a stale
+    # violating score=0.9; staleness does not de-escalate it.
+    result = arbitrate([v], now=NOW, staleness_sec=0.0)
+    assert result.state == STATE_STOP
+    assert result.reason == "stale:src"
+
+
+def test_tiny_staleness_non_violating_is_degraded():
+    """A stale non-violating verdict under tiny staleness floors at DEGRADED."""
+    v = make_verdict("src", score=0.05, violating=False, reason="ok", age=0.001)
     result = arbitrate([v], now=NOW, staleness_sec=0.0)
     assert result.state == STATE_DEGRADED
     assert result.reason == "stale:src"
@@ -509,11 +555,12 @@ def test_tiny_staleness_makes_aged_verdict_stale():
 # ---------------------------------------------------------------------------
 
 
-def test_arbiter_allowlist_excludes_rewind():
-    assert ACTION_REWIND not in ARBITER_ALLOWLIST
+def test_arbiter_allowlist_includes_rewind():
+    """REWIND seam (LOCKED decision 4): REWIND is now a pass-through action."""
+    assert ACTION_REWIND in ARBITER_ALLOWLIST
 
 
-def test_arbiter_allowlist_contains_all_non_rewind_actions():
+def test_arbiter_allowlist_contains_all_actions():
     assert ACTION_NONE in ARBITER_ALLOWLIST
     assert ACTION_LOG_ONLY in ARBITER_ALLOWLIST
     assert ACTION_HOLD in ARBITER_ALLOWLIST

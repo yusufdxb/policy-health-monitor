@@ -16,10 +16,10 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <depend>rcl_interfaces</depend>
   <depend>phm_msgs</depend>
   <depend>phm_core</depend>
 
-  <test_depend>ament_pytest</test_depend>
   <test_depend>python3-pytest</test_depend>
 
   <export>

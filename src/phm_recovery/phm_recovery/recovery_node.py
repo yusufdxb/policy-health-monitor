@@ -28,7 +28,12 @@ from __future__ import annotations
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 
 from phm_recovery._core import (
     ACTION_HOLD,
@@ -42,19 +47,26 @@ from phm_recovery._core import (
     SafetyEnvelope,
 )
 
-# QoS for /phm/health subscription: reliable, depth 10.
-# Health status is a command-class topic; reliability is required so no status
-# message is silently dropped under load.
+# QoS for /phm/health subscription (review decision 7): all four policies
+# declared explicitly. durability MUST be TRANSIENT_LOCAL to match the arbiter
+# publisher (arbiter_node.py health_qos); a VOLATILE subscriber against a
+# TRANSIENT_LOCAL publisher is QoS-incompatible and silently drops every health
+# message. Health status is a command-class topic, so reliability is RELIABLE.
 _HEALTH_QOS = QoSProfile(
-    reliability=ReliabilityPolicy.RELIABLE,
+    history=HistoryPolicy.KEEP_LAST,
     depth=10,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
 )
 
-# QoS for /phm/cmd_vel: reliable, depth 10.
-# Zero-velocity commands must not be dropped.
+# QoS for /phm/cmd_vel (review decision 7): all four policies explicit.
+# Zero-velocity commands must not be dropped (RELIABLE); cmd_vel is a live
+# stream so durability is VOLATILE (a late joiner does not need a stale stop).
 _CMD_VEL_QOS = QoSProfile(
-    reliability=ReliabilityPolicy.RELIABLE,
+    history=HistoryPolicy.KEEP_LAST,
     depth=10,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.VOLATILE,
 )
 
 
@@ -105,6 +117,13 @@ class RecoveryNode(Node):
         self._mapper = HealthToActionMapper()
         self.rewind_hook = RewindHook()  # public: host stack registers callback here
 
+        # Hold actuation flag. UNLIKE the mapper's own hold_active, this is the
+        # ENVELOPE-coupled actuation state: it is set True only when the envelope
+        # returns publish=True for a hold, and cleared only on a real RESUME
+        # (LOCKED decision 5). The zero-velocity timer reads THIS flag, not the
+        # mapper's, so cooldown gating actually couples to what gets published.
+        self._hold_actuating: bool = False
+
         # ROS interface.
         try:
             from phm_msgs.msg import PolicyHealthStatus  # type: ignore[import]
@@ -140,7 +159,16 @@ class RecoveryNode(Node):
     def _on_health(self, msg) -> None:  # msg: PolicyHealthStatus
         """Process one health status message.
 
-        Delegates to HealthToActionMapper, then gates through SafetyEnvelope.
+        Delegates to HealthToActionMapper, then couples hold actuation to the
+        SafetyEnvelope result (LOCKED decision 5, mirroring HELIX
+        recovery_node.py:133-138):
+
+        - The mapper proposes an action and whether a hold should be active.
+        - A hold actuates (``self._hold_actuating`` -> True, driving the
+          zero-velocity timer) only when the envelope returns publish=True.
+        - Cooldown damps NEW holds only. A continued hold is cooldown-exempt
+          (passed via hold_already_active), so SUPPRESSED_COOLDOWN can never
+          release an ongoing hold. A genuine recovery (OK/DEGRADED) clears it.
         """
         now = self._now()
         fault_key = msg.source or "unknown"
@@ -153,11 +181,12 @@ class RecoveryNode(Node):
             reason=msg.reason,
         )
 
-        # 2. If the state is back to OK/DEGRADED and hold was cleared by the
-        #    mapper, signal a RESUME through the envelope so the cooldown is
-        #    not applied to the resume itself.
+        # 2. Recovery: the state returned to OK/DEGRADED and the mapper cleared
+        #    the hold. Release the actuation via a cooldown-exempt RESUME.
         if not decision.hold_active and int(msg.state) in (STATE_OK, 1):  # 1 = DEGRADED
             result = self._envelope.evaluate_resume(fault_key, now)
+            if result.publish:
+                self._hold_actuating = False
             self.get_logger().info(
                 f"RESUME: {result.reason}",
                 throttle_duration_sec=1.0,
@@ -167,8 +196,15 @@ class RecoveryNode(Node):
         if decision.action == ACTION_NONE:
             return
 
-        # 3. Gate the decided action through the safety envelope.
-        result = self._envelope.evaluate(decision.action, fault_key, now)
+        # 3. Gate the decided action through the safety envelope. A hold that is
+        #    already actuating is a cooldown-exempt continuation.
+        result = self._envelope.evaluate(
+            decision.action,
+            fault_key,
+            now,
+            hold_already_active=self._hold_actuating
+            and decision.action in (ACTION_HOLD, ACTION_STOP_AND_HOLD, ACTION_REWIND),
+        )
 
         self.get_logger().info(
             f"envelope: action={decision.action} status={result.status} "
@@ -176,18 +212,22 @@ class RecoveryNode(Node):
             throttle_duration_sec=1.0,
         )
 
+        # 4. Couple hold actuation to the envelope (HELIX recovery_node.py:133-138).
+        #    A NEW hold actuates only when the envelope says publish. A
+        #    SUPPRESSED_COOLDOWN on a re-assert does NOT clear an ongoing hold:
+        #    the hold keeps publishing because _hold_actuating stays True.
         if not result.publish:
             return
 
-        # 4. Dispatch actuating actions.
         if decision.action in (ACTION_HOLD, ACTION_STOP_AND_HOLD):
-            # Zero-velocity publishing is handled by _on_publish_tick while
-            # _mapper.hold_active is True. Nothing else needed here.
+            self._hold_actuating = True
             self.get_logger().warning(
                 f"HOLD active: {decision.reason}",
                 throttle_duration_sec=1.0,
             )
         elif decision.action == ACTION_REWIND:
+            # REWIND seam (LOCKED decision 4): invoke the rewind hook AND hold.
+            self._hold_actuating = True
             self.get_logger().warning(
                 f"REWIND triggered: {decision.reason}",
                 throttle_duration_sec=1.0,
@@ -202,7 +242,11 @@ class RecoveryNode(Node):
     # ------------------------------------------------------------------
 
     def _on_publish_tick(self) -> None:
-        if self._mapper.hold_active:
+        # Drive zero-velocity off the ENVELOPE-coupled actuation flag, not the
+        # mapper's independent hold flag (LOCKED decision 5). This is what makes
+        # the cooldown gate meaningful: the hold publishes iff the envelope
+        # actuated it and it has not been released by a RESUME.
+        if self._hold_actuating:
             self._pub_cmd_vel.publish(Twist())  # zero velocity
 
     # ------------------------------------------------------------------

@@ -1,17 +1,39 @@
 # Policy Health Monitor: Track A Integration and Build Report
 
-Date: 2026-05-29
-Stage: Integrate (colcon + full pure-Python pytest + ruff)
+Date: 2026-05-30 (updated; original integration 2026-05-29)
+Stage: Track A fix pass (adversarial-review punch list) re-verified on top of Integrate
 Environment: mewtwo, ROS 2 Humble, Python 3.10.12, venv at `.venv` (numpy 1.26.4, pytest 9.0.3, ruff 0.15.10)
 
 ## Summary
 
 | Gate | Result |
 |---|---|
-| `colcon build` (6 packages) | PASS, exit 0 |
-| `pytest src -q` (pure-Python suite) | PASS, 179 passed |
-| `ruff check src/` | PASS, all checks passed |
+| `colcon build` (6 packages, clean) | PASS, exit 0, `Summary: 6 packages finished` |
+| `pytest src -q` (pure-Python suite) | PASS, `255 passed` (was 179 at integrate, 184/4-fail at start of fix pass) |
+| `ruff check src/` | PASS, `All checks passed!` |
 | Overall | GREEN |
+
+## Fix pass (2026-05-30): adversarial-review punch list
+
+The fix pass implemented the LOCKED safety decisions from
+`docs/REVIEW_PUNCHLIST.md` and re-verified all three gates. Test count rose from
+179 (integrate) to 255 as new safety regression and seam-integration tests were
+added (4 old arbiter tests that encoded the OLD unsafe stale-downgrade behavior
+were rewritten to assert the new fail-safe contract):
+
+- D1 staleness never de-escalates a violating verdict (arbiter `_core`).
+- D2 violating floor + OOD severity-floor (arbiter `_core`, phm_ood `_core`).
+- D3 OOD action banding LOG_ONLY / HOLD / STOP_AND_HOLD (phm_ood `_core`).
+- D4 REWIND seam: arbiter pass-through + recovery INTERVENE-always-holds, with a
+  cross-module arbitrate() -> HealthToActionMapper integration test.
+- D5 cooldown couples to actuation; ongoing hold is cooldown-exempt (phm_recovery).
+- D6 NaN / non-finite guard at the arbiter trust boundary.
+- D7 explicit 4-policy QoS on every PHM endpoint; recovery `/phm/health`
+  durability set to TRANSIENT_LOCAL to match the arbiter publisher.
+- D8 phm_detectors broken subscription replaced with ROS-graph type resolution +
+  explicit QoS; STRING_ARRAY params fixed so configured topics are accepted; node
+  verified to construct live with `freq_topics=[/scan] dead_topics=[/odom]`.
+- D9 package.xml dependency fixes + CI now builds and tests all 6 packages.
 
 ## 1. Environment
 
@@ -38,26 +60,29 @@ go2_ws overlay unset so it does not interfere):
 colcon build
 ```
 
-Final output tail (clean build from scratch):
+Final output tail (clean `rm -rf build install log && colcon build`, 2026-05-30 fix pass):
 
 ```
 Starting >>> phm_msgs
-Finished <<< phm_msgs [2.06s]
+Finished <<< phm_msgs [2.36s]
 Starting >>> phm_arbiter
 Starting >>> phm_detectors
 Starting >>> phm_ood
 Starting >>> phm_recovery
 Starting >>> phm_sim
-Finished <<< phm_detectors [0.98s]
-Finished <<< phm_recovery [0.98s]
-Finished <<< phm_ood [0.99s]
-Finished <<< phm_arbiter [0.99s]
-Finished <<< phm_sim [0.99s]
+Finished <<< phm_sim [1.06s]
+Finished <<< phm_detectors [1.07s]
+Finished <<< phm_ood [1.07s]
+Finished <<< phm_recovery [1.07s]
+Finished <<< phm_arbiter [1.08s]
 
-Summary: 6 packages finished [3.13s]
+Summary: 6 packages finished [3.51s]
 ```
 
-Exit code 0. No packages failed.
+Exit code 0. No packages failed. All five rclpy node modules import after the
+clean rebuild, and `phm_detectors` was verified to construct live with
+`freq_topics=[/scan] dead_topics=[/odom]` configured (the exact condition that
+crashed the old bogus-subscription code, D8).
 
 ### Generated message contract verified
 
@@ -134,23 +159,24 @@ Command:
 .venv/bin/python -m pytest src -q
 ```
 
-Output tail:
+Output tail (after the 2026-05-30 fix pass):
 
 ```
-........................................................................ [ 40%]
-........................................................................ [ 80%]
-...................................                                      [100%]
-179 passed in 0.18s
+........................................................................ [ 28%]
+........................................................................ [ 56%]
+........................................................................ [ 84%]
+.......................................                                  [100%]
+255 passed in 0.20s
 ```
 
-Per-package breakdown (sums to 179):
+Per-package breakdown (sums to 255):
 
 ```
 phm_core       36 passed
-phm_ood        17 passed
-phm_arbiter    38 passed
-phm_detectors  28 passed
-phm_recovery   39 passed
+phm_ood        22 passed   (was 17; +5 severity-floor / action-banding tests, D2/D3)
+phm_arbiter    50 passed   (was 38; +stale/violating-floor/NaN safety + REWIND seam, D1/D2/D6)
+phm_detectors  31 passed   (was 28; +3 construction smoke tests, D8)
+phm_recovery   95 passed   (was 39; +cooldown-coupling + arbiter->recovery seam integration, D4/D5)
 phm_sim        21 passed
 ```
 

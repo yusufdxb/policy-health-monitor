@@ -24,12 +24,18 @@ Parameters (loaded from config/phm_arbiter.yaml):
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 
 from phm_arbiter._core import (
     STATE_OK,
@@ -66,17 +72,24 @@ class ArbiterNode(Node):
         self._latest: dict[str, Any] = {}
 
         # ---------- QoS ----------
-        # Verdicts: reliable, depth 10 (commands channel, must not drop).
+        # All four policies declared explicitly on every PHM endpoint so intent
+        # is unambiguous and a future rclpy default change cannot silently alter
+        # behavior (review decision 7).
+        # Verdicts: reliable, keep_last 10, volatile (commands channel, must not drop).
         verdict_qos = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
             depth=10,
-        )
-        # Health output: reliable, depth 1, transient_local so late-joining
-        # subscribers (e.g. a recovery node that starts after the arbiter) receive
-        # the most recent health state immediately.
-        health_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        # Health output: reliable, keep_last 1, transient_local so late-joining
+        # subscribers (e.g. a recovery node that starts after the arbiter) receive
+        # the most recent health state immediately. The recovery subscriber must
+        # also declare TRANSIENT_LOCAL or DDS drops every message (review decision 7).
+        health_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
             depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
 
@@ -136,7 +149,19 @@ class ArbiterNode(Node):
         for msg in self._latest.values():
             v = _MsgView()
             v.source = msg.source
-            v.score = float(msg.score)
+            # Trust-boundary sanitize (review decision 6): never forward a
+            # non-finite score from a misbehaving/poisoned detector into the
+            # fusion. _core.arbitrate() also guards this (defense in depth), but
+            # we sanitize at ingestion and log throttled so an operator sees it.
+            raw_score = float(msg.score)
+            if not math.isfinite(raw_score):
+                self.get_logger().warning(
+                    f"non-finite score {raw_score!r} from source "
+                    f"{msg.source!r}; treating detector as DEGRADED "
+                    "(bad-score sentinel)",
+                    throttle_duration_sec=1.0,
+                )
+            v.score = raw_score  # _core sanitizes; pass through so reason is set there
             v.violating = bool(msg.violating)
             v.reason = msg.reason
             v.suggested_action = int(msg.suggested_action)
@@ -144,6 +169,16 @@ class ArbiterNode(Node):
             views.append(v)
 
         result: PolicyHealthStatusData = arbitrate(views, now, self._staleness_sec)
+
+        # Final belt-and-suspenders: never publish a NaN/inf in PolicyHealthStatus.score.
+        if not math.isfinite(result.score):
+            result = PolicyHealthStatusData(
+                state=result.state,
+                score=0.5,
+                reason=result.reason,
+                source=result.source,
+                suggested_action=result.suggested_action,
+            )
 
         out = self._PolicyHealthStatus()
         out.header.stamp = self.get_clock().now().to_msg()

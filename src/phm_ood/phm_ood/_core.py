@@ -23,13 +23,17 @@ from __future__ import annotations
 
 import numpy as np
 from phm_core.calibration import calibrate_threshold, rolling_spread
-from phm_core.detector import ACTION_HOLD, ACTION_NONE, DetectorVerdictData
+from phm_core.detector import (
+    ACTION_HOLD,
+    ACTION_LOG_ONLY,
+    ACTION_NONE,
+    ACTION_STOP_AND_HOLD,
+    DetectorVerdictData,
+)
 from phm_core.hysteresis import Hysteresis
 from phm_core.severity import (
+    DEGRADED_THRESHOLD,
     INTERVENE_THRESHOLD,
-    STATE_INTERVENE,
-    STATE_OK,
-    STATE_STOP,
     STOP_THRESHOLD,
     normalize,
 )
@@ -234,10 +238,12 @@ class OodCore:
                 healthy=threshold, worst=0.0)
               so spread == threshold -> 0.0, spread == 0.0 -> 1.0.
 
-        State banding follows severity.py thresholds:
-            - score < INTERVENE_THRESHOLD (0.50) and fired -> DEGRADED/LOG_ONLY
-            - score >= INTERVENE_THRESHOLD and fired       -> INTERVENE/HOLD
-            - score >= STOP_THRESHOLD (0.80) and fired     -> STOP/STOP_AND_HOLD
+        Action banding follows severity.py thresholds (LOCKED decision 3):
+            - score < DEGRADED_THRESHOLD (0.25): below the severity floor; NOT a
+              violation (LOCKED decision 2). violating=False, action NONE.
+            - DEGRADED <= score < INTERVENE (0.25..0.50) and fired -> LOG_ONLY
+            - INTERVENE <= score < STOP (0.50..0.80) and fired     -> HOLD
+            - score >= STOP_THRESHOLD (0.80) and fired             -> STOP_AND_HOLD
         """
         pid_str = f"[{policy_id}] " if policy_id else ""
         n_consec = self._hysteresis.count
@@ -280,21 +286,35 @@ class OodCore:
                 suggested_action=ACTION_NONE,
             )
 
-        # Post-hysteresis: confirmed OOD. Map score to state/action.
-        if score >= STOP_THRESHOLD:
-            state = STATE_STOP
-            action = ACTION_HOLD  # arbiter may escalate; OOD alone -> HOLD
-        elif score >= INTERVENE_THRESHOLD:
-            state = STATE_INTERVENE
-            action = ACTION_HOLD
-        else:
-            state = STATE_OK  # low severity OOD: log but do not intervene
-            action = ACTION_NONE
+        # VIOLATING FLOOR + TOTALITY (LOCKED decision 2): a post-hysteresis score
+        # below the DEGRADED floor is a zero-severity signal. Do NOT emit it as a
+        # violation: a violating=True verdict with a STATE_OK-band score makes the
+        # arbiter worst-wins map non-total (it would carry source/score yet resolve
+        # to OK). Report it as a non-violating pass so the arbiter ignores it.
+        if score < DEGRADED_THRESHOLD:
+            return DetectorVerdictData(
+                source=SOURCE,
+                score=score,
+                violating=False,
+                reason=reason + " (below severity floor)",
+                suggested_action=ACTION_NONE,
+            )
 
-        # Annotate reason with state name for human readability.
-        state_names = {STATE_OK: "ok", STATE_INTERVENE: "intervene",
-                       STATE_STOP: "stop"}
-        reason = reason + f" [{state_names.get(state, str(state))}]"
+        # Post-hysteresis confirmed OOD, action banding (LOCKED decision 3):
+        #   [STOP, 1.0]        -> STOP_AND_HOLD
+        #   [INTERVENE, STOP)  -> HOLD
+        #   [DEGRADED, INTERVENE) -> LOG_ONLY
+        if score >= STOP_THRESHOLD:
+            action = ACTION_STOP_AND_HOLD
+            band = "stop"
+        elif score >= INTERVENE_THRESHOLD:
+            action = ACTION_HOLD
+            band = "intervene"
+        else:
+            action = ACTION_LOG_ONLY
+            band = "degraded"
+
+        reason = reason + f" [{band}]"
 
         return DetectorVerdictData(
             source=SOURCE,

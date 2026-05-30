@@ -13,12 +13,15 @@ Worst-wins rule:
 2. State = max severity state across non-stale, violating verdicts (OK if none).
 3. score = max score; source/reason from the verdict that set the winning state.
 4. suggested_action = the action of the winning verdict, clamped to ARBITER_ALLOWLIST.
-5. A stale verdict (timestamp older than staleness_sec) is promoted to DEGRADED
-   with reason "stale:<source>", never silently dropped.
+5. A stale verdict (timestamp older than staleness_sec) is never silently
+   dropped and never DE-escalated. A stale NON-violating verdict floors at
+   DEGRADED; a stale VIOLATING verdict keeps the worse of (the DEGRADED stale
+   floor, its own live severity). Reason is "stale:<source>". (LOCKED decision 1.)
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 # State enum constants mirror phm_msgs/PolicyHealthStatus.msg exactly.
@@ -35,18 +38,31 @@ ACTION_STOP_AND_HOLD = 3
 ACTION_REWIND = 4
 
 # The arbiter clamps suggested_action to this allowlist.
-# REWIND (4) is excluded: it is a recovery-policy decision, not a fusion output.
+# REWIND (4) is INCLUDED as a pass-through (LOCKED decision 4, REWIND seam): the
+# arbiter forwards a detector's REWIND request unchanged so the recovery layer
+# can act on it. The recovery HealthToActionMapper owns turning REWIND into the
+# rewind hook + hold; the arbiter must not silently drop it to NONE (which made
+# an INTERVENE+REWIND request a no-op end-to-end).
 ARBITER_ALLOWLIST: frozenset[int] = frozenset(
-    {ACTION_NONE, ACTION_LOG_ONLY, ACTION_HOLD, ACTION_STOP_AND_HOLD}
+    {ACTION_NONE, ACTION_LOG_ONLY, ACTION_HOLD, ACTION_STOP_AND_HOLD, ACTION_REWIND}
 )
 
-# A stale verdict is synthesized as DEGRADED, score 0.5, LOG_ONLY action.
-# Score 0.5 is at the boundary of INTERVENE per severity.py but the state is
-# hard-coded to DEGRADED here because stale-ness is a data-quality issue, not a
-# policy-quality issue. The arbiter still participates in worst-wins, so if
-# another source is worse, that wins.
-_STALE_SCORE = 0.25  # minimum score that places a verdict in DEGRADED band
+# Stale-verdict floor. A stale verdict floors at STATE_DEGRADED with a minimum
+# score of _STALE_SCORE (0.25, the lower edge of the DEGRADED band in
+# severity.py). Staleness is a data-quality issue, so a *non-violating* stale
+# verdict is exactly DEGRADED. But staleness must never DE-escalate a violating
+# verdict: a stale-but-violating verdict keeps the worse of (the stale floor,
+# its own live severity). See LOCKED decision 1 in the review punch list.
+# _STALE_SCORE must equal severity.DEGRADED_THRESHOLD; it is the band lower edge,
+# NOT 0.5/INTERVENE.
+_STALE_SCORE = 0.25  # = DEGRADED_THRESHOLD; lower edge of the DEGRADED band
 _STALE_ACTION = ACTION_LOG_ONLY
+
+# Sentinel score used when a verdict carries a non-finite (NaN/inf) score. A
+# poisoned detector is treated as DEGRADED with this finite sentinel so it can
+# never pin the monitor to STOP-with-NaN nor make worst-wins non-deterministic.
+# See LOCKED decision 6 in the review punch list.
+_BAD_SCORE_SENTINEL = 0.5
 
 
 @dataclass
@@ -94,7 +110,9 @@ def arbitrate(
     it is treated as fresh.
 
     Worst-wins fusion:
-    - Stale verdict (age > staleness_sec): synthesized DEGRADED, reason "stale:<source>".
+    - Stale verdict (age > staleness_sec): reason "stale:<source>". Non-violating
+      stale floors at DEGRADED; violating stale keeps max(DEGRADED, its severity)
+      (LOCKED decision 1: staleness never de-escalates a violating verdict).
     - Non-stale, non-violating verdict: contributes nothing to worst-wins.
     - Non-stale, violating verdict: competes by state (highest int wins), then
       by score (highest wins) for tie-breaking.
@@ -112,16 +130,43 @@ def arbitrate(
     candidates: list[_Candidate] = []
 
     for v in verdicts:
+        # --- Trust-boundary guard (LOCKED decision 6) -------------------------
+        # A non-finite score from a misbehaving/poisoned detector must never
+        # propagate. Treat that detector as DEGRADED with a finite sentinel so
+        # it can neither force STOP nor make worst-wins non-deterministic. This
+        # is a second line of defense; arbiter_node sanitizes at ingestion too.
+        raw_score = float(v.score)
+        if not math.isfinite(raw_score):
+            candidates.append(
+                _Candidate(
+                    state=STATE_DEGRADED,
+                    score=_BAD_SCORE_SENTINEL,
+                    reason=f"bad-score:{v.source}",
+                    source=v.source,
+                    suggested_action=ACTION_NONE,
+                )
+            )
+            continue
+
         # Determine age. Verdicts without a timestamp attribute are treated as fresh.
         ts = getattr(v, "timestamp", now)
         age = now - ts
 
         if age > staleness_sec:
-            # Stale: synthesize a DEGRADED candidate, never drop silently.
+            # Stale: never drop silently, and never DE-escalate a violating
+            # verdict (LOCKED decision 1). Take the worst of the stale floor and
+            # the verdict's own live severity. A stale-but-violating STOP stays
+            # STOP; a stale non-violating verdict is exactly DEGRADED.
+            if v.violating:
+                state = max(STATE_DEGRADED, _score_to_state(raw_score))
+                score = max(_STALE_SCORE, raw_score)
+            else:
+                state = STATE_DEGRADED
+                score = _STALE_SCORE
             candidates.append(
                 _Candidate(
-                    state=STATE_DEGRADED,
-                    score=_STALE_SCORE,
+                    state=state,
+                    score=score,
                     reason=f"stale:{v.source}",
                     source=v.source,
                     suggested_action=_STALE_ACTION,
@@ -133,16 +178,17 @@ def arbitrate(
             if action not in ARBITER_ALLOWLIST:
                 action = ACTION_NONE
             # Map the verdict score to a state using the same bands as severity.py:
-            #   score <  0.25 -> OK        (should never reach here if violating is correct)
             #   0.25 <= score < 0.50 -> DEGRADED
             #   0.50 <= score < 0.80 -> INTERVENE
             #   score >= 0.80 -> STOP
-            # We do NOT call severity.classify() here to keep _core.py self-contained.
-            state = _score_to_state(v.score)
+            # VIOLATING FLOOR (LOCKED decision 2): a verdict that asserts it is
+            # violating is never STATE_OK. Floor the state at STATE_DEGRADED so a
+            # sub-0.25 violating score is still visible to the recovery layer.
+            state = max(STATE_DEGRADED, _score_to_state(raw_score))
             candidates.append(
                 _Candidate(
                     state=state,
-                    score=float(v.score),
+                    score=raw_score,
                     reason=v.reason,
                     source=v.source,
                     suggested_action=action,

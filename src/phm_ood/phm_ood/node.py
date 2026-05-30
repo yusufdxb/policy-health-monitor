@@ -272,7 +272,7 @@ class OodNode(LifecycleNode):
         # Validate dim field against the embedding length.
         embedding = np.asarray(msg.embedding, dtype=np.float32)
         if msg.dim > 0 and int(msg.dim) != len(embedding):
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f"PolicyEmbedding.dim={msg.dim} != len(embedding)={len(embedding)};"
                 " trusting the array.",
                 throttle_duration_sec=1.0,

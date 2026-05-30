@@ -21,6 +21,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from phm_core.detector import (
+    ACTION_HOLD,
+    ACTION_LOG_ONLY,
+    ACTION_NONE,
+    ACTION_STOP_AND_HOLD,
+)
 
 from phm_ood._core import SOURCE, OodCore
 
@@ -381,3 +387,68 @@ def test_constructor_rejects_invalid_params(kwargs, exc_msg):
     """OodCore constructor must raise ValueError for invalid parameters."""
     with pytest.raises(ValueError, match=exc_msg):
         OodCore(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Test 16: severity-floor + action-banding (LOCKED decisions 2 and 3)
+# ---------------------------------------------------------------------------
+#
+# _make_verdict maps a post-hysteresis spread to (score, violating, action).
+# score = normalize(spread, healthy=threshold, worst=0.0), so for a chosen
+# threshold T and target score s the spread is T*(1 - s).
+
+_THR = 1.0  # threshold so spread == (1 - target_score)
+
+
+def _verdict_at_score(target_score: float):
+    """Build a fired (post-hysteresis) verdict whose normalized score is target."""
+    core = OodCore(window=WINDOW, threshold=_THR, hysteresis_count=1)
+    spread = _THR * (1.0 - target_score)
+    return core._make_verdict(spread=spread, raw_violating=True, fired=True, policy_id="")
+
+
+def test_below_degraded_floor_is_not_violating():
+    """LOCKED decision 2 (OOD side): a fired score below DEGRADED_THRESHOLD (0.25)
+    must NOT be reported as a zero-severity violation. It returns violating=False
+    so the arbiter never sees a STATE_OK-band 'violating' verdict.
+    """
+    v = _verdict_at_score(0.10)  # below 0.25
+    assert v.violating is False, f"sub-floor score must not violate: {v.reason}"
+    assert v.suggested_action == ACTION_NONE
+    assert "below severity floor" in v.reason.lower()
+
+
+def test_degraded_band_is_log_only():
+    """LOCKED decision 3: score in [DEGRADED, INTERVENE) -> ACTION_LOG_ONLY."""
+    v = _verdict_at_score(0.35)  # 0.25 <= 0.35 < 0.50
+    assert v.violating is True
+    assert v.suggested_action == ACTION_LOG_ONLY, (
+        f"DEGRADED band must be LOG_ONLY, got {v.suggested_action}"
+    )
+
+
+def test_intervene_band_is_hold():
+    """score in [INTERVENE, STOP) -> ACTION_HOLD."""
+    v = _verdict_at_score(0.65)  # 0.50 <= 0.65 < 0.80
+    assert v.violating is True
+    assert v.suggested_action == ACTION_HOLD
+
+
+def test_stop_band_is_stop_and_hold():
+    """LOCKED decision 3: score >= STOP_THRESHOLD (0.80) -> ACTION_STOP_AND_HOLD.
+
+    Previously this band emitted ACTION_HOLD, so a STOP-level OOD never produced
+    a stop unless another detector escalated.
+    """
+    v = _verdict_at_score(0.90)  # >= 0.80
+    assert v.violating is True
+    assert v.suggested_action == ACTION_STOP_AND_HOLD, (
+        f"STOP band must be STOP_AND_HOLD, got {v.suggested_action}"
+    )
+
+
+def test_exactly_degraded_threshold_is_log_only():
+    """Boundary: score exactly at DEGRADED_THRESHOLD (0.25) is a LOG_ONLY violation."""
+    v = _verdict_at_score(0.25)
+    assert v.violating is True
+    assert v.suggested_action == ACTION_LOG_ONLY

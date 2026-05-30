@@ -95,10 +95,24 @@ class SafetyEnvelope:
         # Key: (action_int, fault_key_str) -> last fired wall-clock time.
         self._last_action_time: dict[tuple[int, str], float] = {}
 
-    def evaluate(self, action: int, fault_key: str, now: float) -> EnvelopeResult:
+    def evaluate(
+        self,
+        action: int,
+        fault_key: str,
+        now: float,
+        hold_already_active: bool = False,
+    ) -> EnvelopeResult:
         """Gate a requested action through the safety envelope.
 
         Ported from HELIX helix_recovery/recovery_node.py:44-60.
+
+        Cooldown couples to actuation (LOCKED decision 5): the cooldown damps
+        NEW holds only. A continued/ongoing hold is EXEMPT and is never released
+        by cooldown, so re-asserting INTERVENE/STOP within the cooldown window
+        keeps the existing hold published rather than dropping it. This mirrors
+        HELIX recovery_node.py:133-138, where the hold (``_current_action``) is
+        only ever set when ``result.publish`` is True and is never cleared by a
+        cooldown suppression.
 
         Args:
             action: one of the ACTION_* constants.
@@ -106,6 +120,9 @@ class SafetyEnvelope:
                 health state reason or the publishing source name). Used to
                 scope the cooldown so independent faults do not block each other.
             now: current time in seconds (wall clock or sim clock).
+            hold_already_active: True when a hold is already actuating for this
+                path. A continuation is cooldown-exempt: the envelope returns
+                publish=True so the ongoing hold keeps publishing.
 
         Returns:
             An :class:`EnvelopeResult` describing whether the action was
@@ -121,16 +138,25 @@ class SafetyEnvelope:
                 "SUPPRESSED_ALLOWLIST", False, f"action {name} not in allowlist"
             )
 
-        # RESUME is exempt from cooldown (HELIX recovery_node.py:53-57).
-        # For PHM, RESUME is represented as the ACTION_NONE action with a
-        # clearing call. The caller uses evaluate_resume() for explicit resumes;
-        # this branch is the guard so a raw ACTION_NONE also bypasses cooldown.
-        # (HOLD and STOP_AND_HOLD are the ones that damp flapping.)
+        # Cooldown damps NEW holds only (HOLD and STOP_AND_HOLD). A continuation
+        # of an already-active hold is exempt: it must never be released by the
+        # cooldown gate (that would let the robot move mid-fault). RESUME has its
+        # own cooldown-exempt path in evaluate_resume().
+        name = _ACTION_NAMES.get(action, str(action))
         if action in (ACTION_HOLD, ACTION_STOP_AND_HOLD):
+            if hold_already_active:
+                # Ongoing hold: cooldown-exempt continuation. Keep publishing,
+                # do not touch the cooldown clock (this is not a new assertion).
+                return EnvelopeResult(
+                    "ACCEPTED", True, f"continue active hold ({name}, cooldown-exempt)"
+                )
             key = (action, fault_key)
             last = self._last_action_time.get(key)
             if last is not None and (now - last) < self.cooldown_seconds:
                 elapsed = now - last
+                # SUPPRESSED_COOLDOWN damps a NEW hold only. publish=False here
+                # means "do not START a new hold"; the caller must NOT clear an
+                # existing hold on this result (handled in the node).
                 return EnvelopeResult(
                     "SUPPRESSED_COOLDOWN",
                     False,
@@ -140,7 +166,6 @@ class SafetyEnvelope:
             self._last_action_time[key] = now
 
         publish = action in _ACTUATING_ACTIONS
-        name = _ACTION_NAMES.get(action, str(action))
         return EnvelopeResult("ACCEPTED", publish, f"action {name} accepted")
 
     def evaluate_resume(self, fault_key: str, now: float) -> EnvelopeResult:
@@ -180,10 +205,13 @@ class HealthToActionMapper:
 
     Rules:
     - STATE_STOP -> force STOP_AND_HOLD regardless of suggested_action.
-    - STATE_INTERVENE with suggested_action >= HOLD -> activate HOLD.
-    - suggested_action == ACTION_REWIND -> activate REWIND (hold + log).
+    - STATE_INTERVENE ALWAYS actuates at least a HOLD, regardless of
+      suggested_action (LOCKED decision 4: an INTERVENE state with no actuation
+      is itself the bug). A low/NONE suggested_action does NOT downgrade the hold.
+    - suggested_action == ACTION_REWIND (in INTERVENE) -> invoke the rewind hook
+      AND hold (REWIND seam, LOCKED decision 4).
     - STATE_OK or STATE_DEGRADED (with low suggested_action) -> clear hold.
-    - LOG_ONLY events pass through without actuating.
+    - LOG_ONLY events at OK/DEGRADED pass through without actuating.
     """
 
     def __init__(self) -> None:
@@ -217,6 +245,12 @@ class HealthToActionMapper:
             )
 
         if state == STATE_INTERVENE:
+            # LOCKED decision 4: STATE_INTERVENE ALWAYS actuates at least a HOLD.
+            # An INTERVENE state that produced no hold was the end-to-end safety
+            # hole (arbiter clamped REWIND -> NONE, recovery then released the
+            # hold). The suggested_action only ESCALATES the actuation (REWIND
+            # invokes the rewind hook in addition to holding); it can never
+            # downgrade an INTERVENE below a hold.
             if suggested_action == ACTION_REWIND:
                 self._hold_active = True
                 return HealthActionDecision(
@@ -224,18 +258,11 @@ class HealthToActionMapper:
                     True,
                     f"ACTION_REWIND from {source}: {reason}",
                 )
-            if suggested_action >= ACTION_HOLD:
-                self._hold_active = True
-                return HealthActionDecision(
-                    ACTION_HOLD,
-                    True,
-                    f"STATE_INTERVENE/HOLD from {source}: {reason}",
-                )
-            # INTERVENE with LOG_ONLY or NONE suggested: log but no hold.
+            self._hold_active = True
             return HealthActionDecision(
-                ACTION_LOG_ONLY,
-                self._hold_active,  # preserve existing hold state
-                f"STATE_INTERVENE/LOG from {source}: {reason}",
+                ACTION_HOLD,
+                True,
+                f"STATE_INTERVENE/HOLD from {source}: {reason}",
             )
 
         if state in (STATE_OK, STATE_DEGRADED):
