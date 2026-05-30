@@ -107,6 +107,17 @@ ament_target_dependencies(ood_node rclcpp phm_msgs)
 add_executable(bench_latency src/bench_latency.cpp)
 target_link_libraries(bench_latency phm_ood_core)
 
+# When built with the LibTorch backend, the executables pull libtorch .so files
+# transitively through the static core but get no RUNPATH to them, so they fail
+# at runtime with "libtorch.so: cannot open shared object file". Add the torch
+# lib dir to their build- and install-RPATH so they run from the install tree.
+if(PHM_TORCH_FOUND)
+  set_target_properties(ood_node bench_latency PROPERTIES
+    BUILD_RPATH "${TORCH_INSTALL_PREFIX}/lib"
+    INSTALL_RPATH "${TORCH_INSTALL_PREFIX}/lib"
+    INSTALL_RPATH_USE_LINK_PATH ON)
+endif()
+
 install(TARGETS ood_node bench_latency
   DESTINATION lib/${PROJECT_NAME})
 install(TARGETS phm_ood_core
