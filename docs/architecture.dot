@@ -1,0 +1,79 @@
+// Policy Health Monitor (PHM) data flow.
+// Renders the runtime-assurance pipeline grounded in the real packages:
+//   phm_msgs (PolicyEmbedding / DetectorVerdict / PolicyHealthStatus),
+//   phm_ood, phm_detectors, phm_arbiter (worst-wins fusion), phm_recovery.
+// Render:  dot -Tsvg docs/architecture.dot -o docs/architecture.svg
+//          dot -Tpng -Gdpi=150 docs/architecture.dot -o docs/architecture.png
+digraph PHM {
+  rankdir=LR;
+  bgcolor="#0b0f14";
+  pad=0.4;
+  nodesep=0.45;
+  ranksep=0.85;
+  fontname="Helvetica";
+  splines=spline;
+  node [shape=box, style="rounded,filled", fontname="Helvetica",
+        fontsize=12, color="#1f2933", penwidth=1.4, fontcolor="#e6edf3",
+        margin="0.22,0.14"];
+  edge [color="#5a6b7b", fontname="Helvetica", fontsize=10,
+        fontcolor="#9fb0c0", penwidth=1.3, arrowsize=0.8];
+
+  // ---- Inputs (left): what PHM observes ----
+  subgraph cluster_inputs {
+    label="inputs (observed)";
+    labelloc="t";
+    fontcolor="#7d8da0";
+    fontsize=12;
+    color="#1a222b";
+    style="rounded";
+    bgcolor="#0e141b";
+    embed   [label="policy internals\nPolicyEmbedding\n(512-D recurrent feature)", fillcolor="#13354a"];
+    health  [label="node + sensor health\nfrequency / liveness\nCPU / staleness", fillcolor="#13354a"];
+  }
+
+  // ---- Detectors (middle-left) ----
+  subgraph cluster_detect {
+    label="detectors (phm_core hysteresis + severity)";
+    labelloc="t";
+    fontcolor="#7d8da0";
+    fontsize=12;
+    color="#1a222b";
+    style="rounded";
+    bgcolor="#0e141b";
+    ood   [label="phm_ood\nrolling-spread OOD\nspread < thr -> firing", fillcolor="#1d4d3f"];
+    det   [label="phm_detectors\nfrequency / threshold\nliveness checks", fillcolor="#1d4d3f"];
+  }
+
+  // ---- Verdict bus ----
+  verdict [label="DetectorVerdict\nsource, score[0..1],\nviolating, suggested_action",
+           shape=note, fillcolor="#3a2f12", color="#5a4a1a"];
+
+  // ---- Fusion ----
+  arbiter [label="phm_arbiter\nworst-wins fusion\nstaleness floor, allowlist clamp",
+           fillcolor="#4a2030", color="#6a2c44"];
+
+  // ---- Single arbitrated signal ----
+  status [label="PolicyHealthStatus\nOK / DEGRADED / INTERVENE / STOP\nscore + reason + suggested_action",
+          shape=box, style="rounded,filled", fillcolor="#5a3410", color="#7a4814", penwidth=2.0];
+
+  // ---- Recovery ----
+  recovery [label="phm_recovery\nSafetyEnvelope (cooldown, allowlist)\nsafe cmd_vel hold + rewind hook",
+            fillcolor="#143a52", color="#1f5577"];
+
+  // ---- Actuation seam ----
+  cmd [label="cmd_vel / actuation seam\n(supervised learned controller)",
+       shape=cds, fillcolor="#11202b", color="#274050"];
+
+  // edges
+  embed  -> ood     [label="hidden state"];
+  health -> det     [label="topic stats"];
+  ood    -> verdict;
+  det    -> verdict;
+  verdict -> arbiter [label="latest per source"];
+  arbiter -> status  [label="max severity"];
+  status  -> recovery [label="state + action"];
+  recovery -> cmd     [label="HOLD / STOP_AND_HOLD\nREWIND / RESUME"];
+
+  // back-pressure annotation: recovery supervises the same controller PHM watches
+  cmd -> embed [label="policy step", style=dashed, color="#3a4a5a", constraint=false];
+}

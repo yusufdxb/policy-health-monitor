@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Policy Health Monitor, the reliability layer for learned robot policies</title>
+<meta name="description" content="Runtime assurance for learned robot policies: a single arbitrated health signal (OK / DEGRADED / INTERVENE / STOP) driven by an out-of-distribution detector on policy internals, with safe recovery." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Display: Sora. Data/technical: IBM Plex Mono. (Deliberately NOT Inter/Roboto/Arial/Space Grotesk.) -->
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#070a0e;
+    --panel:#0d131a;
+    --panel-2:#101924;
+    --line:#1a2530;
+    --line-2:#243341;
+    --ink:#e7eef5;
+    --ink-dim:#9fb0c0;
+    --ink-faint:#6c7d8d;
+    --amber:#f4b740;     /* instrument amber, the signature accent */
+    --amber-soft:#caa15a;
+    --teal:#2fd6b0;      /* OK / green-line */
+    --cyan:#39c0e8;
+    --rose:#ff6b6b;      /* STOP */
+    --violet:#9b8cff;
+    --ok:#2fd6b0;
+    --degraded:#f4b740;
+    --intervene:#ff9e3d;
+    --stop:#ff6b6b;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --disp:"Sora",ui-sans-serif,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(47,214,176,.06), transparent 60%),
+      radial-gradient(1000px 500px at -10% 10%, rgba(244,183,64,.05), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--disp);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  a{color:var(--cyan);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+
+  /* faint instrument grid behind everything */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35;
+    background-image:
+      linear-gradient(rgba(36,51,65,.18) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(36,51,65,.18) 1px,transparent 1px);
+    background-size:42px 42px;
+    -webkit-mask-image:radial-gradient(circle at 50% 0%, black, transparent 75%);
+            mask-image:radial-gradient(circle at 50% 0%, black, transparent 75%);
+  }
+  .wrap, header, section{position:relative;z-index:1}
+
+  /* ---- page-load stagger ---- */
+  .rise{opacity:0;transform:translateY(16px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .d1{animation-delay:.05s}.d2{animation-delay:.16s}.d3{animation-delay:.28s}
+  .d4{animation-delay:.40s}.d5{animation-delay:.52s}.d6{animation-delay:.64s}
+  .d7{animation-delay:.78s}.d8{animation-delay:.92s}
+  @media (prefers-reduced-motion:reduce){.rise{animation:none;opacity:1;transform:none}}
+
+  /* ---- top status bar ---- */
+  .topbar{
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(13,19,26,.92),rgba(7,10,14,.7));
+    backdrop-filter:blur(6px);
+    font-family:var(--mono);font-size:12px;color:var(--ink-faint);
+  }
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:46px;gap:12px;flex-wrap:wrap}
+  .brandmark{display:flex;align-items:center;gap:10px;color:var(--ink);letter-spacing:.5px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px rgba(47,214,176,.16);animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .topbar nav{display:flex;gap:18px}
+  .topbar nav a{color:var(--ink-faint)}
+  .topbar nav a:hover{color:var(--amber);text-decoration:none}
+
+  /* ---- hero ---- */
+  header.hero{padding:78px 0 56px}
+  .kicker{
+    font-family:var(--mono);font-size:12.5px;letter-spacing:3px;text-transform:uppercase;
+    color:var(--amber-soft);margin-bottom:22px;display:inline-flex;align-items:center;gap:12px;
+  }
+  .kicker::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--amber),transparent)}
+  h1{
+    font-size:clamp(2.5rem,6vw,4.4rem);line-height:1.02;font-weight:800;margin:0 0 18px;
+    letter-spacing:-1.4px;
+  }
+  h1 .accent{
+    background:linear-gradient(120deg,var(--amber) 0%,var(--teal) 95%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .lede{font-size:clamp(1.05rem,2.2vw,1.32rem);color:var(--ink-dim);max-width:760px;font-weight:400}
+  .lede b{color:var(--ink);font-weight:600}
+  .hero-cta{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap}
+  .btn{
+    font-family:var(--mono);font-size:13px;letter-spacing:.5px;padding:11px 20px;border-radius:8px;
+    border:1px solid var(--line-2);color:var(--ink);background:var(--panel);transition:.18s;
+  }
+  .btn:hover{border-color:var(--amber);color:var(--amber);text-decoration:none;transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(180deg,#1a2b22,#0e1a14);border-color:#22503e;color:var(--teal)}
+  .btn.primary:hover{border-color:var(--teal);color:#aef6e4}
+
+  /* the state ladder readout in the hero */
+  .ladder{
+    margin-top:42px;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    font-family:var(--mono);
+  }
+  .ladder .cell{background:var(--panel);padding:18px 16px}
+  .ladder .lvl{font-size:12px;letter-spacing:1.5px;font-weight:600;margin-bottom:6px}
+  .ladder .desc{font-size:11.5px;color:var(--ink-faint);line-height:1.4}
+  .l-ok .lvl{color:var(--ok)} .l-deg .lvl{color:var(--degraded)}
+  .l-int .lvl{color:var(--intervene)} .l-stop .lvl{color:var(--stop)}
+  .ladder .cell{position:relative}
+  .ladder .cell::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+  .l-ok::before{background:var(--ok)} .l-deg::before{background:var(--degraded)}
+  .l-int::before{background:var(--intervene)} .l-stop::before{background:var(--stop)}
+
+  /* ---- sections ---- */
+  section{padding:64px 0;border-top:1px solid var(--line)}
+  .sec-head{display:flex;align-items:baseline;gap:16px;margin-bottom:36px;flex-wrap:wrap}
+  .sec-num{font-family:var(--mono);font-size:13px;color:var(--amber-soft);letter-spacing:2px}
+  h2{font-size:clamp(1.6rem,3.4vw,2.3rem);margin:0;font-weight:700;letter-spacing:-.6px}
+  .sec-sub{color:var(--ink-dim);max-width:740px;margin:0;font-size:1.02rem}
+
+  /* ---- pillars ---- */
+  .pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .pillar{
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    border:1px solid var(--line);border-radius:14px;padding:24px 22px;position:relative;overflow:hidden;transition:.2s;
+  }
+  .pillar:hover{border-color:var(--line-2);transform:translateY(-3px)}
+  .pillar::after{content:"";position:absolute;top:0;left:0;right:0;height:2px;opacity:.85}
+  .p1::after{background:linear-gradient(90deg,var(--cyan),transparent)}
+  .p2::after{background:linear-gradient(90deg,var(--amber),transparent)}
+  .p3::after{background:linear-gradient(90deg,var(--teal),transparent)}
+  .pillar .pidx{font-family:var(--mono);font-size:12px;color:var(--ink-faint);letter-spacing:1px}
+  .pillar h3{font-size:1.18rem;margin:8px 0 8px;font-weight:600;letter-spacing:-.3px}
+  .pillar p{color:var(--ink-dim);font-size:.95rem;margin:0 0 18px}
+  .feeders{display:flex;flex-direction:column;gap:8px}
+  .feeder{
+    display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12.5px;
+    background:rgba(7,10,14,.55);border:1px solid var(--line);border-radius:8px;padding:8px 11px;color:var(--ink-dim);
+  }
+  .feeder .tag{color:var(--amber-soft);font-weight:600}
+  .feeder .arrow{color:var(--ink-faint);margin-left:auto}
+  .feeder small{color:var(--ink-faint);display:block;font-size:11px;margin-top:1px}
+
+  /* ---- architecture ---- */
+  .arch-note{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-top:8px}
+  .diagram-shell{
+    border:1px solid var(--line);border-radius:14px;background:#0b0f14;padding:10px;margin-top:6px;
+    overflow-x:auto;scrollbar-color:var(--line-2) transparent;
+  }
+  .diagram-shell img{display:block;min-width:1100px;width:100%;height:auto}
+  /* HTML flow recreation (always visible, mirrors the .dot) */
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:26px;flex-wrap:wrap}
+  .flow-col{display:flex;flex-direction:column;gap:12px;justify-content:center;min-width:180px;flex:1}
+  .fb{
+    border:1px solid var(--line-2);border-radius:10px;padding:13px 14px;background:var(--panel);
+    font-family:var(--mono);font-size:12px;line-height:1.45;
+  }
+  .fb .h{font-weight:600;color:var(--ink);font-size:12.5px;display:block;margin-bottom:3px}
+  .fb .s{color:var(--ink-faint);font-size:11px}
+  .fb.in{border-color:#1f4d6b}.fb.in .h{color:var(--cyan)}
+  .fb.det{border-color:#1d5c4a}.fb.det .h{color:var(--teal)}
+  .fb.verdict{border-color:#5a4a1a;background:#15110a}.fb.verdict .h{color:var(--amber)}
+  .fb.arb{border-color:#6a2c44;background:#170c11}.fb.arb .h{color:var(--rose)}
+  .fb.status{border-color:#7a4814;background:#1a1109}.fb.status .h{color:#ffb454}
+  .fb.rec{border-color:#1f5577}.fb.rec .h{color:var(--cyan)}
+  .flow-sep{display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-family:var(--mono);font-size:20px;padding:0 4px;min-width:24px}
+
+  /* ---- results table ---- */
+  .table-shell{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+  thead th{
+    text-align:left;padding:14px 18px;background:var(--panel-2);color:var(--ink-dim);
+    font-weight:600;border-bottom:1px solid var(--line-2);letter-spacing:.5px;font-size:12px;text-transform:uppercase
+  }
+  tbody td{padding:13px 18px;border-bottom:1px solid var(--line);color:var(--ink)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:rgba(244,183,64,.03)}
+  td.metric{color:var(--ink-dim)}
+  .pending{
+    font-family:var(--mono);font-size:11px;color:var(--degraded);
+    border:1px solid #5a4a1a;background:rgba(244,183,64,.07);border-radius:5px;padding:2px 8px;
+  }
+  .results-foot{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-top:14px}
+  .results-foot code{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:2px 7px;color:var(--amber-soft)}
+
+  /* ---- status strip ---- */
+  .status-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .ss{border:1px solid var(--line);border-radius:14px;padding:22px;background:linear-gradient(180deg,var(--panel-2),var(--panel))}
+  .ss .badge{font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:12px}
+  .ss.green .badge{color:var(--teal);background:rgba(47,214,176,.08);border:1px solid #1d5c4a}
+  .ss.amber .badge{color:var(--degraded);background:rgba(244,183,64,.07);border:1px solid #5a4a1a}
+  .ss.blue .badge{color:var(--cyan);background:rgba(57,192,232,.08);border:1px solid #1f4d6b}
+  .ss h4{margin:0 0 6px;font-size:1.05rem;font-weight:600}
+  .ss p{margin:0;color:var(--ink-dim);font-size:.92rem}
+
+  /* ---- footer ---- */
+  footer{border-top:1px solid var(--line);padding:42px 0 64px;color:var(--ink-faint);font-family:var(--mono);font-size:12.5px}
+  footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink-dim)}
+
+  @media (max-width:880px){
+    .pillars,.status-strip{grid-template-columns:1fr}
+    .ladder{grid-template-columns:repeat(2,1fr)}
+    .flow{flex-direction:column}
+    .flow-sep{transform:rotate(90deg);padding:6px 0}
+    .topbar nav{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- top instrument bar -->
+<div class="topbar">
+  <div class="wrap">
+    <div class="brandmark"><span class="dot"></span> POLICY&nbsp;HEALTH&nbsp;MONITOR</div>
+    <nav>
+      <a href="#pillars">portfolio</a>
+      <a href="#arch">architecture</a>
+      <a href="#results">benchmark</a>
+      <a href="#status">status</a>
+    </nav>
+  </div>
+</div>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker rise d1">Runtime assurance for learned robot policies</div>
+    <h1 class="rise d2">The <span class="accent">reliability layer</span><br/>for learned robot policies.</h1>
+    <p class="lede rise d3">
+      Learned controllers fail silently: the network keeps emitting confident actions while
+      its hidden state has already left the distribution it was trained on. <b>Policy Health Monitor</b>
+      watches a policy's own internals, fuses them with node and sensor health, and emits a single
+      arbitrated signal, <b>OK / DEGRADED / INTERVENE / STOP</b>, each with a reason and a safe
+      recommended action, so a learned policy can be supervised in the loop instead of trusted blind.
+    </p>
+    <div class="hero-cta rise d4">
+      <a class="btn primary" href="#arch">View the architecture</a>
+      <a class="btn" href="https://github.com/yusufdxb/policy-health-monitor" target="_blank" rel="noopener">policy-health-monitor &#8599;</a>
+    </div>
+
+    <!-- the four-state readout, the product in one glance -->
+    <div class="ladder rise d5" aria-label="health state ladder">
+      <div class="cell l-ok"><div class="lvl">OK</div><div class="desc">policy internals in-distribution, all checks live</div></div>
+      <div class="cell l-deg"><div class="lvl">DEGRADED</div><div class="desc">soft margin breached or a source went stale, log + watch</div></div>
+      <div class="cell l-int"><div class="lvl">INTERVENE</div><div class="desc">collapse / freshness fault, hold or rewind to last safe state</div></div>
+      <div class="cell l-stop"><div class="lvl">STOP</div><div class="desc">severe fault, stop-and-hold, hand control back to supervisor</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- PILLARS -->
+<section id="pillars">
+  <div class="wrap">
+    <div class="sec-head rise d1">
+      <span class="sec-num">01</span>
+      <div>
+        <h2>Three pillars, one thesis</h2>
+        <p class="sec-sub">The detector, hysteresis, and metrics work from three prior projects is consolidated into one runtime-assurance stack. Each pillar is a public repository that feeds a piece of PHM.</p>
+      </div>
+    </div>
+
+    <div class="pillars">
+      <!-- P1 -->
+      <div class="pillar p1 rise d2">
+        <div class="pidx">PILLAR&nbsp;/&nbsp;01</div>
+        <h3>Learned-policy deployment</h3>
+        <p>Training and shipping real learned locomotion policies, and the parity discipline that makes a deployed network behave like the one that was trained.</p>
+        <div class="feeders">
+          <div class="feeder"><span class="tag">go2-phoenix</span> <span class="arrow">&#8599;</span></div>
+          <div class="feeder">policy internals + ONNX parity <small>source of the embedding stream PHM watches</small></div>
+        </div>
+      </div>
+      <!-- P2 -->
+      <div class="pillar p2 rise d3">
+        <div class="pidx">PILLAR&nbsp;/&nbsp;02</div>
+        <h3>Runtime failure intelligence</h3>
+        <p>Out-of-distribution detection on policy internals, incident telemetry for ROS 2 robots, and the hysteresis and threshold-calibration methods that keep detectors from flickering.</p>
+        <div class="feeders">
+          <div class="feeder"><span class="tag">phantom-braking</span> <span class="arrow">&#8599;</span></div>
+          <div class="feeder"><span class="tag">BlackBoxRS</span> <span class="arrow">&#8599;</span></div>
+          <div class="feeder">OOD-on-collapse + incident telemetry <small>ported into phm_ood and phm_detectors</small></div>
+        </div>
+      </div>
+      <!-- P3 -->
+      <div class="pillar p3 rise d4">
+        <div class="pidx">PILLAR&nbsp;/&nbsp;03</div>
+        <h3>Safety-critical embodied capstone</h3>
+        <p>Self-healing ROS 2 supervision on a legged robot, and the safety-envelope discipline (cooldown, allowlist, resume) carried forward to govern every recovery action.</p>
+        <div class="feeders">
+          <div class="feeder"><span class="tag">HELIX</span> <span class="arrow">&#8599;</span></div>
+          <div class="feeder">assistive legged escort, safe HRI <small>SafetyEnvelope ported into phm_recovery</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="arch">
+  <div class="wrap">
+    <div class="sec-head rise d1">
+      <span class="sec-num">02</span>
+      <div>
+        <h2>The PHM data flow</h2>
+        <p class="sec-sub">Policy internals and health signals run through independent detectors, each emitting a normalized verdict. A worst-wins arbiter fuses them into one health state, and a safety-enveloped recovery layer turns that state into a safe command.</p>
+      </div>
+    </div>
+
+    <!-- HTML recreation of the flow, mirrors docs/architecture.dot -->
+    <div class="flow rise d2">
+      <div class="flow-col">
+        <div class="fb in"><span class="h">PolicyEmbedding</span><span class="s">512-D recurrent feature, per policy step</span></div>
+        <div class="fb in"><span class="h">node + sensor health</span><span class="s">frequency, liveness, CPU, staleness</span></div>
+      </div>
+      <div class="flow-sep">&#8594;</div>
+      <div class="flow-col">
+        <div class="fb det"><span class="h">phm_ood</span><span class="s">rolling-spread OOD, fires when spread &lt; calibrated threshold</span></div>
+        <div class="fb det"><span class="h">phm_detectors</span><span class="s">frequency / threshold / liveness checks</span></div>
+      </div>
+      <div class="flow-sep">&#8594;</div>
+      <div class="flow-col">
+        <div class="fb verdict"><span class="h">DetectorVerdict</span><span class="s">source, score[0..1], violating, suggested_action (post-hysteresis)</span></div>
+      </div>
+      <div class="flow-sep">&#8594;</div>
+      <div class="flow-col">
+        <div class="fb arb"><span class="h">phm_arbiter</span><span class="s">worst-wins fusion, staleness floor, allowlist clamp</span></div>
+        <div class="fb status"><span class="h">PolicyHealthStatus</span><span class="s">OK / DEGRADED / INTERVENE / STOP + reason + action</span></div>
+      </div>
+      <div class="flow-sep">&#8594;</div>
+      <div class="flow-col">
+        <div class="fb rec"><span class="h">phm_recovery</span><span class="s">SafetyEnvelope, safe cmd_vel hold + rewind hook</span></div>
+      </div>
+    </div>
+
+    <p class="arch-note rise d3">Generated diagram (Graphviz), source at <code style="font-family:var(--mono)">docs/architecture.dot</code>. Scroll to pan.</p>
+    <div class="diagram-shell rise d3">
+      <img src="../docs/architecture.svg" alt="Policy Health Monitor data-flow diagram: policy embedding and node/sensor health feed phm_ood and phm_detectors, which emit DetectorVerdict messages into the worst-wins phm_arbiter, producing a PolicyHealthStatus that drives phm_recovery." />
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section id="results">
+  <div class="wrap">
+    <div class="sec-head rise d1">
+      <span class="sec-num">03</span>
+      <div>
+        <h2>Detector benchmark</h2>
+        <p class="sec-sub">The OOD detector is scored against held-out collapse and in-distribution traces. Threshold-free metrics (AUROC, AUPR) plus an operating-point false-positive rate and end-to-end latency. Numbers are produced by the benchmark harness, not asserted here.</p>
+      </div>
+    </div>
+
+    <div class="table-shell rise d2">
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Detector</th>
+            <th>Value</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="metric">AUROC &#8593;</td><td>phm_ood (rolling-spread)</td><td>1.000 [1.000, 1.000]</td><td>&#8805; 0.90</td></tr>
+          <tr><td class="metric">AUPR &#8593;</td><td>phm_ood (rolling-spread)</td><td>1.000 [1.000, 1.000]</td><td>&#8805; 0.85</td></tr>
+          <tr><td class="metric">FPR@95 &#8595;</td><td>phm_ood (rolling-spread)</td><td>0.000 [0.000, 0.000]</td><td>&#8804; 0.10</td></tr>
+          <tr><td class="metric">runtime latency &#8595;</td><td>C++ node, workstation CPU</td><td>0.093 ms / frame</td><td>&#8804; 5 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="results-foot rise d3">Numbers above are the collapse-mode result on synthetic embedding streams, where the second-order (variance-collapse) anomaly is invisible to distance and reconstruction baselines (Mahalanobis 0.075, KNN 0.030, RND 0.026 AUROC) but caught at 1.000 by the spread monitor. Full table, the shift-mode comparison, and bootstrap CIs live in <code>benchmark/RESULTS.md</code>. Hardware and real-policy numbers are still pending a compute target.</p>
+  </div>
+</section>
+
+<!-- STATUS -->
+<section id="status">
+  <div class="wrap">
+    <div class="sec-head rise d1">
+      <span class="sec-num">04</span>
+      <div>
+        <h2>Honest status</h2>
+        <p class="sec-sub">What is certified in simulation today, and what is explicitly still pending hardware. No claim here outruns the evidence behind it.</p>
+      </div>
+    </div>
+
+    <div class="status-strip">
+      <div class="ss green rise d2">
+        <span class="badge">SIM-CERTIFIED</span>
+        <h4>Core logic</h4>
+        <p>phm_core arbitration, hysteresis, severity, and the OOD detector are pure-Python and unit-tested without a ROS graph. Worst-wins fusion and staleness handling are locked by tests.</p>
+      </div>
+      <div class="ss blue rise d3">
+        <span class="badge">INTEGRATION</span>
+        <h4>ROS 2 nodes</h4>
+        <p>phm_ood, phm_detectors, phm_arbiter, and phm_recovery are thin rclpy wrappers over the tested core, exercised in a simulated graph (phm_sim).</p>
+      </div>
+      <div class="ss amber rise d4">
+        <span class="badge">PENDING HARDWARE</span>
+        <h4>On-robot validation</h4>
+        <p>End-to-end latency and recovery actuation are not yet validated on a physical compute target. Hardware bring-up is gated on lab access and is tracked as an open item, not claimed as done.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>Policy Health Monitor &middot; MIT &middot; runtime assurance for learned robot policies</div>
+    <div><a href="https://github.com/yusufdxb/policy-health-monitor" target="_blank" rel="noopener">github.com/yusufdxb/policy-health-monitor</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
