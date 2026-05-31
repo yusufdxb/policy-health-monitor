@@ -15,7 +15,9 @@ rclpy is imported anywhere in this file. The tests exercise:
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
+from phm_core.calibration import rolling_spread
 from phm_core.detector import (
     ACTION_HOLD,
     ACTION_NONE,
@@ -27,6 +29,8 @@ from phm_detectors._core import (
     DeadTopicSample,
     FrequencyDropAdapter,
     FrequencySample,
+    RecurrentSpreadSample,
+    RecurrentTemporalSpreadAdapter,
     StaticThresholdAdapter,
     ThresholdSample,
 )
@@ -376,3 +380,198 @@ class TestIntegration:
         assert fv is not None and fv.violating is False
         assert tv is not None and tv.violating is False
         assert dv is not None and dv.violating is False
+
+
+# ---------------------------------------------------------------------------
+# RecurrentTemporalSpreadAdapter tests (Phantom-Braking E6)
+# ---------------------------------------------------------------------------
+
+_EMB_TOPIC = "/policy/embedding"
+
+
+def _build_spread_adapter(window: int = 30, threshold: float = 0.0,
+                          min_consec: int = 2):
+    return RecurrentTemporalSpreadAdapter(
+        _EMB_TOPIC, window=window, threshold=threshold,
+        min_consecutive=min_consec,
+    )
+
+
+def _emb(vec) -> RecurrentSpreadSample:
+    return RecurrentSpreadSample(topic=_EMB_TOPIC, embedding=np.asarray(vec, float))
+
+
+class TestRecurrentTemporalSpreadRegistration:
+    """The detector is discoverable through the package registration surface
+    (the package __init__ __all__, the same mechanism the other adapters use)."""
+
+    def test_importable_from_package_root(self):
+        import phm_detectors
+
+        assert hasattr(phm_detectors, "RecurrentTemporalSpreadAdapter")
+        assert hasattr(phm_detectors, "RecurrentSpreadSample")
+        assert "RecurrentTemporalSpreadAdapter" in phm_detectors.__all__
+        assert "RecurrentSpreadSample" in phm_detectors.__all__
+
+    def test_is_a_phm_detector(self):
+        from phm_core.detector import Detector
+
+        adapter = _build_spread_adapter()
+        assert isinstance(adapter, Detector)
+        # Honors the Detector interface: name, target_topic, update().
+        assert adapter.name == f"recurrent_temporal_spread:{_EMB_TOPIC}"
+        assert adapter.target_topic == _EMB_TOPIC
+        assert callable(adapter.update)
+
+
+class TestRecurrentTemporalSpreadNumerics:
+    """rolling_spread matches the Phantom-Braking reference on a fixed input,
+    and threshold calibration returns a sane percentile."""
+
+    def test_rolling_spread_matches_reference_fixed_input(self):
+        # Fixed synthetic input: T=4 frames, D=2 dims, window=3.
+        # Expected values computed by hand from the population (ddof=0) variance:
+        #   t=2 (frames 0,1,2): col0=[0,1,2] var=2/3, col1=[0,0,0] var=0 -> 2/3
+        #   t=3 (frames 1,2,3): col0=[1,2,3] var=2/3, col1=[0,0,3] var=2   -> 8/3
+        H = np.array(
+            [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 3.0]], dtype=np.float64
+        )
+        s = rolling_spread(H, window=3)
+        assert np.isnan(s[0]) and np.isnan(s[1])
+        assert s[2] == pytest.approx(2.0 / 3.0)
+        assert s[3] == pytest.approx(8.0 / 3.0)
+        # Cross-check against the definition used in the Phantom-Braking source
+        # (e6_detector.py:22): float(np.var(window, axis=0).sum()).
+        assert s[2] == pytest.approx(float(np.var(H[0:3], axis=0).sum()))
+        assert s[3] == pytest.approx(float(np.var(H[1:4], axis=0).sum()))
+
+    def test_adapter_last_spread_matches_rolling_spread(self):
+        # The adapter's per-window spread equals rolling_spread()[-1] on the
+        # same window, i.e. it is the same math as the Phantom-Braking source.
+        rng = np.random.default_rng(7)
+        window = 8
+        frames = rng.normal(size=(window, 5))
+        adapter = _build_spread_adapter(window=window, threshold=0.0)
+        v = None
+        for f in frames:
+            v = adapter.update(_emb(f))
+        assert v is not None
+        expected = float(rolling_spread(frames, window)[-1])
+        assert adapter.last_spread == pytest.approx(expected)
+
+    def test_calibrate_threshold_is_sane_percentile(self):
+        # At the 1st percentile, ~1% of in-distribution frames fall below the
+        # threshold (the Phantom-Braking calibration property). Use enough
+        # frames that the empirical fraction is stable.
+        rng = np.random.default_rng(0)
+        window = 30
+        ref = rng.normal(size=(500, 8))
+        adapter = _build_spread_adapter(window=window)
+        thr = adapter.calibrate_from_data(ref, percentile=1.0)
+        assert adapter.threshold == thr
+        spreads = rolling_spread(ref, window)
+        valid = spreads[~np.isnan(spreads)]
+        # Threshold lies inside the spread distribution.
+        assert valid.min() <= thr <= valid.max()
+        # ~1% of frames below the 1st-percentile threshold (tolerant band).
+        frac_below = float(np.mean(valid < thr))
+        assert 0.0 <= frac_below <= 0.05
+
+
+class TestRecurrentTemporalSpreadBehavior:
+    def test_wrong_topic_returns_none(self):
+        adapter = _build_spread_adapter(window=3, threshold=1.0)
+        v = adapter.update(
+            RecurrentSpreadSample(topic="/other", embedding=np.zeros(4))
+        )
+        assert v is None
+
+    def test_warmup_returns_healthy_until_window_fills(self):
+        adapter = _build_spread_adapter(window=3, threshold=1.0)
+        # First two frames are warm-up (buffer 1/3, 2/3).
+        for i in range(2):
+            v = adapter.update(_emb([float(i), 0.0]))
+            assert v is not None
+            assert v.violating is False
+            assert v.score == 0.0
+            assert "warming up" in v.reason
+
+    def test_healthy_spread_not_violating(self):
+        # A moving (spread-out) recurrent state stays above a low threshold.
+        adapter = _build_spread_adapter(window=3, threshold=0.1, min_consec=1)
+        adapter.update(_emb([0.0, 0.0]))
+        adapter.update(_emb([1.0, 0.0]))
+        v = adapter.update(_emb([2.0, 0.0]))  # spread = 2/3 >= 0.1
+        assert v is not None
+        assert v.violating is False
+        assert v.source == f"recurrent_temporal_spread:{_EMB_TOPIC}"
+        assert 0.0 <= v.score <= 1.0
+        assert ">=" in v.reason
+
+    def test_collapse_fires_after_hysteresis(self):
+        # A frozen recurrent state has spread 0 < threshold -> OOD. With
+        # min_consecutive=2, the first collapsed frame must NOT fire yet.
+        adapter = _build_spread_adapter(window=3, threshold=1.0, min_consec=2)
+        # Fill window with a moving state first (healthy), then freeze.
+        adapter.update(_emb([0.0, 0.0]))
+        adapter.update(_emb([5.0, 0.0]))
+        adapter.update(_emb([10.0, 0.0]))  # window full, spread high, healthy
+        frozen = _emb([2.0, 2.0])
+        # Each subsequent frame is the same point; once the window is all the
+        # same point spread -> 0.
+        adapter.update(frozen)
+        adapter.update(frozen)
+        v_pre = adapter.update(frozen)  # window now fully frozen -> spread 0
+        v_fire = adapter.update(frozen)
+        assert v_pre is not None and v_pre.violating is False  # 1st below-thr
+        assert v_fire is not None and v_fire.violating is True
+        assert v_fire.score == pytest.approx(1.0)  # spread 0 -> worst
+        assert v_fire.suggested_action == ACTION_STOP_AND_HOLD
+        assert "<" in v_fire.reason
+
+    def test_recovery_resets_hysteresis(self):
+        adapter = _build_spread_adapter(window=2, threshold=1.0, min_consec=2)
+        frozen = _emb([1.0, 1.0])
+        moving_a = _emb([0.0, 0.0])
+        moving_b = _emb([10.0, 10.0])
+        # First frozen frame is warm-up (buffer 1/2); the next two fill an
+        # all-frozen window (spread 0) and accumulate the two below-threshold
+        # observations hysteresis needs to fire.
+        adapter.update(frozen)  # warm-up, hysteresis untouched
+        v1 = adapter.update(frozen)  # window full, 1st below-thr
+        v_fire = adapter.update(frozen)  # 2nd below-thr -> fires
+        assert v1 is not None and v1.violating is False
+        assert v_fire is not None and v_fire.violating is True
+        # Recover with a spread-out window.
+        adapter.update(moving_a)
+        v_ok = adapter.update(moving_b)  # window [moving_a, moving_b], high spread
+        assert v_ok is not None and v_ok.violating is False
+        # One more collapsed frame should not fire immediately (hysteresis
+        # reset): it is again only the 1st below-threshold observation.
+        adapter.update(frozen)  # window [moving_b, frozen]: still has spread
+        v_after = adapter.update(frozen)  # window all-frozen, 1st below-thr again
+        assert v_after is not None and v_after.violating is False
+
+    def test_score_range_is_unit_interval(self):
+        adapter = _build_spread_adapter(window=2, threshold=2.0, min_consec=1)
+        rng = np.random.default_rng(3)
+        for _ in range(20):
+            v = adapter.update(_emb(rng.normal(size=4)))
+            assert v is not None
+            assert 0.0 <= v.score <= 1.0
+
+    def test_window_must_be_at_least_two(self):
+        with pytest.raises(ValueError):
+            RecurrentTemporalSpreadAdapter(_EMB_TOPIC, window=1)
+
+    def test_low_spread_is_the_unhealthy_direction(self):
+        # Direction check vs the threshold adapter: here a LOW value fires.
+        adapter = _build_spread_adapter(window=2, threshold=1.0, min_consec=1)
+        # High-spread window: healthy.
+        adapter.update(_emb([0.0, 0.0]))
+        v_high = adapter.update(_emb([10.0, 10.0]))  # spread = 100 >= 1.0
+        assert v_high is not None and v_high.violating is False
+        # Collapsed window: same point -> spread 0 < 1.0 -> fires.
+        adapter.update(_emb([4.0, 4.0]))
+        v_low = adapter.update(_emb([4.0, 4.0]))  # spread 0
+        assert v_low is not None and v_low.violating is True

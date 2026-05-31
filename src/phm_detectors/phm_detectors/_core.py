@@ -34,7 +34,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+import numpy as np
+from phm_core.calibration import calibrate_threshold, rolling_spread
 from phm_core.detector import (
+    ACTION_NONE,
     ACTION_STOP_AND_HOLD,
     Detector,
     DetectorVerdictData,
@@ -72,6 +75,22 @@ class ThresholdSample:
     metric: str
     value: float
     threshold: float
+
+
+@dataclass
+class RecurrentSpreadSample:
+    """One policy hidden-state frame for the recurrent-temporal-spread detector.
+
+    ``embedding`` is the policy's internal recurrent feature for a single frame
+    (1-D, e.g. the 512-D supercombo recurrent vector). The adapter buffers these
+    frames and watches the trace of their rolling covariance.
+
+    ``topic`` lets the node route only the embedding stream this detector
+    watches, mirroring the topic-match guard the other adapters use.
+    """
+
+    topic: str
+    embedding: np.ndarray
 
 
 @dataclass
@@ -423,4 +442,204 @@ class DeadTopicAdapter(Detector):
             violating=raw_violating,
             reason=reason,
             suggested_action=action,
+        )
+
+
+# ---------------------------------------------------------------------------
+# RecurrentTemporalSpreadAdapter
+# ---------------------------------------------------------------------------
+
+
+class RecurrentTemporalSpreadAdapter(Detector):
+    """Fires when a policy's recurrent feature freezes (rolling spread collapses).
+
+    Origin: this is the E6 self-aware OOD monitor from Phantom-Braking
+    (``supercombo-blindspot``, github.com/yusufdxb/supercombo-blindspot),
+    ``src/e6_detector.py:16-31`` (``rolling_spread`` + ``calibrate_threshold``).
+    There it showed that openpilot's supercombo driving model freezes its 512-D
+    recurrent feature to a single point out of distribution, and that a monitor
+    watching the rolling temporal spread of that feature, calibrated at the 1st
+    percentile of real-driving spread (reference threshold 0.078873), catches the
+    collapse. The byte-faithful math lives in ``phm_core.calibration``
+    (rolling_spread / calibrate_threshold), itself ported from that source; this
+    adapter reuses those functions rather than reimplementing them.
+
+    Signal direction (opposite of the threshold / frequency adapters): a LOW
+    rolling spread is the unhealthy one. The spread is the trace of the windowed
+    covariance (sum of per-dimension variances over the last ``window`` frames);
+    it drops toward zero when the recurrent state stops moving. So the adapter
+    fires when ``spread < threshold`` rather than above it.
+
+    The adapter buffers the last ``window`` embedding frames. Until the buffer
+    fills it returns a warm-up healthy verdict (never ``None`` once a matching
+    sample arrives, so the arbiter always has a fresh signal). After the buffer
+    fills it computes the rolling spread of the window, compares against the
+    calibrated threshold, applies hysteresis, and emits a verdict.
+
+    Calibration: the threshold can be supplied at construction time or learned
+    from a corpus of in-distribution embeddings via :meth:`calibrate_from_data`
+    (the deploy-time hook), which delegates to
+    ``phm_core.calibration.calibrate_threshold`` at the given percentile.
+
+    Score normalization (low spread = bad): ``normalize(spread,
+    healthy=threshold, worst=0.0)`` so ``spread == threshold`` maps to 0.0 and a
+    fully frozen state (spread 0) maps to 1.0. When the threshold is
+    non-positive (uncalibrated) any below-threshold spread is treated as the
+    worst case (score 1.0).
+
+    Args:
+        target_topic: the embedding topic this adapter watches (used as
+            ``Detector.target_topic``; the node routes by topic).
+        window: number of consecutive frames in the rolling covariance. Must be
+            >= 2. Default 30, matching the Phantom-Braking E6 window.
+        threshold: calibrated spread below which the detector fires. Default 0.0
+            (uncalibrated); set via the constructor or
+            :meth:`calibrate_from_data` before deployment.
+        min_consecutive: hysteresis window. A verdict fires only after this many
+            consecutive below-threshold samples. Default 2, matching the other
+            adapters.
+    """
+
+    def __init__(
+        self,
+        target_topic: str,
+        window: int = 30,
+        threshold: float = 0.0,
+        min_consecutive: int = 2,
+    ) -> None:
+        if window < 2:
+            raise ValueError(f"window must be >= 2, got {window}")
+        self.name = f"recurrent_temporal_spread:{target_topic}"
+        self.target_topic = target_topic
+        self._window = window
+        self._threshold = float(threshold)
+        self._hysteresis = Hysteresis(min_consecutive)
+        # Rolling buffer of 1-D embedding frames, capped at window length.
+        self._buffer: list[np.ndarray] = []
+        self._last_spread: float | None = None
+
+    @property
+    def window(self) -> int:
+        """Rolling-spread window length."""
+        return self._window
+
+    @property
+    def threshold(self) -> float:
+        """Current calibrated spread threshold (spread below this fires)."""
+        return self._threshold
+
+    @property
+    def last_spread(self) -> float | None:
+        """Most recently computed rolling spread, or None if not yet computed."""
+        return self._last_spread
+
+    def set_threshold(self, threshold: float) -> None:
+        """Set the calibrated spread threshold. Call once before monitoring."""
+        self._threshold = float(threshold)
+
+    def calibrate_from_data(
+        self, in_dist_hidden: np.ndarray, percentile: float = 1.0
+    ) -> float:
+        """Learn and store the threshold from in-distribution embeddings.
+
+        Delegates to ``phm_core.calibration`` (Phantom-Braking E6): computes the
+        rolling spread of ``in_dist_hidden`` and takes its ``percentile``-th
+        percentile, so ~99% of real frames stay above the threshold at the
+        default 1st percentile.
+
+        Args:
+            in_dist_hidden: shape (T, D) array of in-distribution hidden states.
+            percentile: percentile of the spread distribution (default 1.0).
+
+        Returns:
+            The computed threshold (also stored on the adapter).
+        """
+        spreads = rolling_spread(
+            np.asarray(in_dist_hidden, dtype=np.float64), self._window
+        )
+        thr = calibrate_threshold(spreads, percentile)
+        self._threshold = thr
+        return thr
+
+    def update(
+        self, sample: RecurrentSpreadSample
+    ) -> DetectorVerdictData | None:
+        """Process one embedding frame and optionally emit a verdict.
+
+        Accepts only samples whose ``topic`` matches ``target_topic``. While the
+        rolling buffer is filling it returns a warm-up healthy verdict. Once full
+        it computes the rolling spread, compares against the threshold (spread <
+        threshold -> OOD), applies hysteresis, and returns a verdict.
+
+        Args:
+            sample: a ``RecurrentSpreadSample`` carrying one embedding frame.
+
+        Returns:
+            A ``DetectorVerdictData`` for a matching topic (warm-up or scored),
+            or ``None`` if the sample is for a different topic.
+        """
+        if sample.topic != self.target_topic:
+            return None
+
+        emb = np.asarray(sample.embedding, dtype=np.float64).ravel()
+        self._buffer.append(emb)
+        if len(self._buffer) > self._window:
+            self._buffer.pop(0)
+
+        # Warm-up: buffer not yet full -> healthy verdict, hysteresis untouched.
+        if len(self._buffer) < self._window:
+            return DetectorVerdictData(
+                source=self.name,
+                score=0.0,
+                violating=False,
+                reason=(
+                    f"recurrent_temporal_spread:{self.target_topic} warming up: "
+                    f"{len(self._buffer)}/{self._window} frames"
+                ),
+                suggested_action=ACTION_NONE,
+            )
+
+        # Rolling spread over the full window: only the last value is non-NaN.
+        hidden = np.stack(self._buffer, axis=0)  # (window, D)
+        spread = float(rolling_spread(hidden, self._window)[-1])
+        self._last_spread = spread
+
+        # Low spread = OOD (Phantom-Braking E6: spread < threshold -> firing).
+        raw_violating = spread < self._threshold
+        post_hyst = self._hysteresis.observe(raw_violating)
+
+        # Score: 0 = spread == threshold (healthy edge), 1 = spread == 0 (frozen).
+        if self._threshold > 0.0:
+            score = normalize(spread, healthy=self._threshold, worst=0.0)
+        else:
+            # Uncalibrated/degenerate threshold: any breach is worst case.
+            score = 1.0 if raw_violating else 0.0
+
+        sev = classify(score)
+
+        if raw_violating:
+            reason = (
+                f"recurrent_temporal_spread:{self.target_topic} spread "
+                f"{spread:.6f} < threshold {self._threshold:.6f} "
+                f"(window {self._window})"
+            )
+            logger.warning(
+                "RecurrentTemporalSpreadAdapter %s: spread %.6f < threshold %.6f",
+                self.target_topic,
+                spread,
+                self._threshold,
+            )
+        else:
+            reason = (
+                f"recurrent_temporal_spread:{self.target_topic} spread "
+                f"{spread:.6f} >= threshold {self._threshold:.6f} "
+                f"(window {self._window})"
+            )
+
+        return DetectorVerdictData(
+            source=self.name,
+            score=score,
+            violating=post_hyst,
+            reason=reason,
+            suggested_action=sev.suggested_action,
         )
