@@ -8,7 +8,7 @@
     health signal), PolicyEmbedding (policy internal-state input contract), and
     DetectorVerdict (per-detector partial verdict for the arbiter).
   </description>
-  <maintainer email="youssefguenena@gmail.com">Yusuf Guenena</maintainer>
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

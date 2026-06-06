@@ -15,7 +15,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yusuf Guenena",
-    maintainer_email="youssefguenena@gmail.com",
+    maintainer_email="yusuf.a.guenena@gmail.com",
     description="PHM Recovery Node: /phm/health -> safe cmd_vel hold + rewind hook.",
     license="MIT",
     entry_points={

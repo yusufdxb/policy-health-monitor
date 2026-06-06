@@ -10,7 +10,7 @@
     (collapsed spread), enabling end-to-end smoke tests of phm_ood and
     phm_arbiter without a real policy process.
   </description>
-  <maintainer email="youssefguenena@gmail.com">Yusuf Guenena</maintainer>
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

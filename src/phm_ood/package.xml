@@ -10,7 +10,7 @@
     a calibrated threshold (low spread = OOD), applies phm_core.Hysteresis,
     and publishes a DetectorVerdict on /phm/verdicts with source='phm_ood'.
   </description>
-  <maintainer email="youssefguenena@gmail.com">Yusuf Guenena</maintainer>
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>

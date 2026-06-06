@@ -18,7 +18,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yusuf Guenena",
-    maintainer_email="youssefguenena@gmail.com",
+    maintainer_email="yusuf.a.guenena@gmail.com",
     description=(
         "Rolling-spread OOD detector lifecycle node for the Policy Health Monitor."
     ),
