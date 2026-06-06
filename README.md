@@ -44,6 +44,30 @@ location detectors are structurally blind to it. On the **shift** failure both t
 baselines and PHM are perfect. The two scenarios make the contrast explicit; PHM covers the
 failure mode the standard baselines miss.
 
+## Installation
+
+The ROS-free detector library (detector logic, OOD scoring, arbitration, recovery, and the
+synthetic stream generator) installs with pip and needs no ROS:
+
+```bash
+pip install git+https://github.com/yusufdxb/policy-health-monitor.git
+```
+
+```python
+from phm_sim import generate_embeddings
+from phm_core import rolling_spread
+```
+
+The full ROS 2 graph (the `rclpy` nodes and C++ runtime node) builds with colcon on a
+sourced ROS 2 Humble environment:
+
+```bash
+git clone https://github.com/yusufdxb/policy-health-monitor.git
+cd policy-health-monitor
+source /opt/ros/humble/setup.bash
+colcon build
+```
+
 ## Development
 
 ```bash

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "phm_core"
 version = "0.1.0"
 description = "Pure-Python detector logic for the Policy Health Monitor: Detector ABC, Hysteresis, calibration, severity. No ROS dependency."
-authors = [{ name = "Yusuf Guenena", email = "youssefguenena@gmail.com" }]
+authors = [{ name = "Yusuf Guenena", email = "yusuf.a.guenena@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"

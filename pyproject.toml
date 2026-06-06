@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policy-health-monitor"
+version = "0.1.0"
+description = "Runtime reliability layer for learned robot policies: out-of-distribution detection on policy internals, a worst-wins health arbiter, and a safe-recovery layer."
+authors = [{ name = "Yusuf Guenena", email = "yusuf.a.guenena@gmail.com" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = [
+    "robotics",
+    "ros2",
+    "reliability",
+    "out-of-distribution",
+    "runtime-monitoring",
+    "learned-policies",
+    "safety",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/yusufdxb/policy-health-monitor"
+Repository = "https://github.com/yusufdxb/policy-health-monitor"
+Issues = "https://github.com/yusufdxb/policy-health-monitor/issues"
+
+# Pip distribution exposes only the ROS-free library code (detector logic, OOD
+# scoring, arbitration, recovery, and the synthetic stream generator). The rclpy
+# node modules (`*_node.py`, `node.py`, `main.py`) ship inside these packages but
+# import rclpy lazily; the full ROS 2 graph is built with colcon, not pip.
+[tool.setuptools]
+packages = [
+    "phm_core",
+    "phm_detectors",
+    "phm_ood",
+    "phm_arbiter",
+    "phm_recovery",
+    "phm_sim",
+]
+
+[tool.setuptools.package-dir]
+phm_core = "src/phm_core/phm_core"
+phm_detectors = "src/phm_detectors/phm_detectors"
+phm_ood = "src/phm_ood/phm_ood"
+phm_arbiter = "src/phm_arbiter/phm_arbiter"
+phm_recovery = "src/phm_recovery/phm_recovery"
+phm_sim = "src/phm_sim/phm_sim"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
