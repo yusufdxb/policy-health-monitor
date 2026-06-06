@@ -13,7 +13,7 @@
     rolling-spread kernel is behind a pluggable Backend interface (dependency-free
     std::vector default, optional Eigen, optional LibTorch).
   </description>
-  <maintainer email="youssefguenena@gmail.com">Yusuf Guenena</maintainer>
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

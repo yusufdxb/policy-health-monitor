@@ -4,7 +4,7 @@
   <name>phm_arbiter</name>
   <version>0.1.0</version>
   <description>PHM arbiter: fuses DetectorVerdict messages into a single PolicyHealthStatus on /phm/health.</description>
-  <maintainer email="youssefguenena@gmail.com">Yusuf Guenena</maintainer>
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

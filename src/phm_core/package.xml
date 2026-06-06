@@ -1,24 +1,19 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>phm_detectors</name>
+  <name>phm_core</name>
   <version>0.1.0</version>
   <description>
-    Bridges BlackBoxRS detector patterns (frequency drop, static threshold,
-    dead topic) into phm_core.Detector verdicts. Contains three pure-Python
-    adapters and a thin rclpy lifecycle node that publishes
-    phm_msgs/DetectorVerdict to /phm/verdicts.
+    Pure-Python detector logic for the Policy Health Monitor: Detector ABC,
+    hysteresis, calibration, and severity. No ROS dependency; the sibling rclpy
+    packages are thin wrappers over this logic.
   </description>
   <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
-  <depend>rclpy</depend>
-  <depend>std_msgs</depend>
-  <depend>rcl_interfaces</depend>
-  <depend>phm_msgs</depend>
-  <depend>phm_core</depend>
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

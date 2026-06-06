@@ -13,7 +13,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yusuf Guenena",
-    maintainer_email="youssefguenena@gmail.com",
+    maintainer_email="yusuf.a.guenena@gmail.com",
     description="PHM arbiter: fuses DetectorVerdict -> /phm/health (PolicyHealthStatus).",
     license="MIT",
     entry_points={
