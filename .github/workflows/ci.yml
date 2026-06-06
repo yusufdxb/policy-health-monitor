@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  phm_core:
-    name: ruff + pytest (phm_core)
+  pure_python:
+    name: ruff + pytest (pure-Python stack)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -20,8 +20,36 @@ jobs:
           python -m pip install numpy==1.26.4 pytest ruff
       - name: Ruff lint
         run: ruff check src/phm_core
-      - name: Pytest
-        run: python -m pytest src/phm_core -q
+      - name: Pytest (ROS-free packages + benchmark)
+        run: |
+          python -m pytest \
+            src/phm_core src/phm_detectors src/phm_ood \
+            src/phm_arbiter src/phm_recovery src/phm_sim benchmark -q
+
+  pip_install:
+    name: pip install + import smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - name: pip install .
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+      - name: Import smoke (clean env, no ROS)
+        run: |
+          python - <<'PY'
+          import importlib
+          for m in ["phm_core","phm_detectors","phm_ood","phm_arbiter","phm_recovery","phm_sim"]:
+              importlib.import_module(m)
+              print("import OK:", m)
+          from phm_sim import generate_embeddings
+          from phm_core import rolling_spread
+          generate_embeddings()
+          print("pip import smoke PASSED")
+          PY
 
   colcon:
     name: colcon build (ros:humble)
