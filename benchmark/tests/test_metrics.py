@@ -5,8 +5,8 @@ FPR@95 implementations to values computed by hand.
 """
 
 import numpy as np
-
 from lib import metrics
+from lib.metrics import aggregate_seeds, calibrate_threshold_at_tpr, lead_time
 
 
 def test_auroc_perfect_separation():
@@ -95,9 +95,6 @@ def test_bootstrap_ci_brackets_point_estimate():
     assert lo < hi
 
 
-from lib.metrics import lead_time
-
-
 def test_lead_time_positive_when_alarm_precedes_onset():
     scores = np.zeros(100)
     scores[45:] = 1.0
@@ -120,9 +117,6 @@ def test_lead_time_none_when_no_onset():
     assert lead_time(scores, threshold=0.5, onset=-1) is None
 
 
-from lib.metrics import aggregate_seeds
-
-
 def test_aggregate_seeds_mean_std():
     vals = [0.90, 0.92, 0.94, 0.96, 0.98]
     agg = aggregate_seeds(vals)
@@ -143,12 +137,9 @@ def test_aggregate_seeds_all_none():
     assert agg["mean"] is None
 
 
-from lib.metrics import calibrate_threshold_at_tpr
-
-
 def test_calibrate_threshold_at_tpr_hits_target():
     rng = np.random.default_rng(0)
-    id_scores = rng.normal(0, 1, 1000)
+    _id_scores = rng.normal(0, 1, 1000)
     ood_scores = rng.normal(6, 1, 1000)
     thr = calibrate_threshold_at_tpr(ood_scores, target_tpr=0.95)
     tpr = (ood_scores >= thr).mean()
