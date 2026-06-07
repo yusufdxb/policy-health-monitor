@@ -149,11 +149,29 @@ class TestHoldActiveProperty:
 # ---------------------------------------------------------------------------
 
 class TestRewindHook:
-    def test_default_trigger_logs_warning(self, caplog):
-        hook = RewindHook()
-        with caplog.at_level(logging.WARNING, logger="phm_recovery._core"):
-            hook.trigger()
-        assert any("REWIND" in r.message for r in caplog.records)
+    def test_default_trigger_logs_warning(self):
+        # Capture via a handler attached directly to the module logger rather
+        # than pytest's caplog fixture: caplog relies on records propagating to
+        # a root handler, which regressed in pytest 9.x (records fall through to
+        # logging.lastResort/stderr and are never captured). A directly-attached
+        # handler tests the same behavior independently of pytest version.
+        records: list[logging.LogRecord] = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        logger = logging.getLogger("phm_recovery._core")
+        handler = _Capture()
+        prev_level = logger.level
+        logger.addHandler(handler)
+        logger.setLevel(logging.WARNING)
+        try:
+            RewindHook().trigger()
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(prev_level)
+        assert any("REWIND" in r.getMessage() for r in records)
 
     def test_registered_callback_is_called(self):
         hook = RewindHook()
