@@ -4,8 +4,7 @@
 The label is computed from generated token ids only, independent of any OOD
 detector, so no detector grades its own homework.
 """
-import numpy as np
-from lib.labeling import ngram_repetition_rate, failure_labels
+from lib.labeling import failure_labels, ngram_repetition_rate
 
 
 def test_repetition_rate_all_repeat_is_one():
