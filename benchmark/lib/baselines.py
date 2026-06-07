@@ -102,7 +102,7 @@ def relative_mahalanobis(features_id: np.ndarray, features_test: np.ndarray,
     m_id = mahalanobis(features_id, features_test, reg=reg)
     bg_mus, bg_precs = _fit_background_gmm(features_id, n_components=2, reg=reg)
     comp_scores = []
-    for mu, prec in zip(bg_mus, bg_precs):
+    for mu, prec in zip(bg_mus, bg_precs, strict=True):
         X = features_test - mu
         comp_scores.append(np.einsum("ij,jk,ik->i", X, prec, X))
     comp_min = np.min(np.stack(comp_scores), axis=0)
@@ -139,3 +139,78 @@ def knn_distance(features_id: np.ndarray, features_test: np.ndarray,
         part = np.partition(d2, k - 1, axis=1)[:, k - 1]
         out[i:i + chunk] = np.sqrt(part)
     return out
+
+
+def pca_residual(features_id, features_test, n_components: int = 32):
+    """Second-order OOD score: residual energy outside the ID principal subspace.
+
+    Fit PCA on ID features (mean + top-k right singular vectors). Score each test
+    frame by the squared norm of the part NOT captured by the ID subspace. A
+    collapsed/frozen embedding sits off the ID manifold's normal spread and leaves
+    a residual the location baselines miss. Higher = more OOD.
+    """
+    fid = np.asarray(features_id, dtype=np.float64)
+    ft = np.asarray(features_test, dtype=np.float64)
+    mu = fid.mean(axis=0)
+    Xc = fid - mu
+    _, _, vt = np.linalg.svd(Xc, full_matrices=False)
+    k = min(n_components, vt.shape[0])
+    basis = vt[:k]
+    tc = ft - mu
+    proj = tc @ basis.T @ basis
+    resid = tc - proj
+    return np.sum(resid * resid, axis=1)
+
+
+def hotelling_t2_window(features_id, features_test, window: int = 20):
+    """Second-order score: deviation of the windowed within-stream variance from
+    the ID variance level. A collapse drives the trailing-window total variance
+    toward zero; the absolute log-ratio against the ID variance is high for both
+    collapse (too low) and erratic (too high) windows. Higher = more OOD.
+    """
+    fid = np.asarray(features_id, dtype=np.float64)
+    ft = np.asarray(features_test, dtype=np.float64)
+    id_var = np.trace(np.cov(fid.T)) if fid.shape[0] > 1 else 1.0
+    id_var = max(id_var, 1e-12)
+    T = ft.shape[0]
+    out = np.zeros(T, dtype=np.float64)
+    for t in range(T):
+        lo = max(0, t - window + 1)
+        win = ft[lo : t + 1]
+        v = np.trace(np.cov(win.T)) if win.shape[0] > 1 else 0.0
+        out[t] = abs(np.log((v + 1e-12) / id_var))
+    return out
+
+
+def temporal_rnd(features_id, features_test, window: int = 8,
+                 hidden: int = 64, seed: int = 0):
+    """RND (Burda et al. 2019) over a temporal window, numpy closed-form.
+
+    Input = the flattened trailing `window` of frames (zero-padded at the start),
+    capturing temporal structure a per-frame RND misses. A fixed random target
+    net and a ridge-fit predictor are trained on ID windows; the test score is the
+    predictor's squared error. Higher = more OOD.
+    """
+    rng = np.random.default_rng(seed)
+
+    def windows(F):
+        F = np.asarray(F, dtype=np.float64)
+        T, d = F.shape
+        W = np.zeros((T, window * d), dtype=np.float64)
+        for t in range(T):
+            lo = max(0, t - window + 1)
+            chunk = F[lo : t + 1].reshape(-1)
+            W[t, -chunk.size :] = chunk
+        return W
+
+    Wid = windows(features_id)
+    Wt = windows(features_test)
+    in_dim = Wid.shape[1]
+    proj = rng.normal(size=(in_dim, hidden)) / np.sqrt(in_dim)
+    target_id = np.tanh(Wid @ proj)
+    target_t = np.tanh(Wt @ proj)
+    lam = 1e-2
+    A = Wid.T @ Wid + lam * np.eye(in_dim)
+    B = np.linalg.solve(A, Wid.T @ target_id)
+    pred_t = Wt @ B
+    return np.sum((pred_t - target_t) ** 2, axis=1)
