@@ -141,3 +141,15 @@ def test_aggregate_seeds_all_none():
     agg = aggregate_seeds([None, None])
     assert agg["n"] == 0
     assert agg["mean"] is None
+
+
+from lib.metrics import calibrate_threshold_at_tpr
+
+
+def test_calibrate_threshold_at_tpr_hits_target():
+    rng = np.random.default_rng(0)
+    id_scores = rng.normal(0, 1, 1000)
+    ood_scores = rng.normal(6, 1, 1000)
+    thr = calibrate_threshold_at_tpr(ood_scores, target_tpr=0.95)
+    tpr = (ood_scores >= thr).mean()
+    assert abs(tpr - 0.95) < 0.03

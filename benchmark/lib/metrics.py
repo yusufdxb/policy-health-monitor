@@ -207,3 +207,15 @@ def aggregate_seeds(values):
     arr = np.asarray(vals, dtype=np.float64)
     std = float(np.std(arr, ddof=1)) if arr.size > 1 else 0.0
     return {"mean": float(arr.mean()), "std": std, "n": int(arr.size)}
+
+
+def calibrate_threshold_at_tpr(ood_scores, target_tpr: float = 0.95) -> float:
+    """Threshold admitting `target_tpr` of OOD frames as alarms (higher=OOD).
+
+    Used for LOCO: calibrate on all-but-one OOD condition, then evaluate the held-
+    out condition at this threshold. The threshold is the (1 - target_tpr) quantile
+    of the calibration OOD scores.
+    """
+    s = np.asarray(ood_scores, dtype=np.float64)
+    s = s[np.isfinite(s)]
+    return float(np.quantile(s, 1.0 - target_tpr))
