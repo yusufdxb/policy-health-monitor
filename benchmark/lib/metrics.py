@@ -177,3 +177,19 @@ def bootstrap_ci(metric_fn: Callable[[np.ndarray, np.ndarray], float],
     lo = float(np.quantile(vals, alpha))
     hi = float(np.quantile(vals, 1.0 - alpha))
     return float(vals.mean()), lo, hi
+
+
+def lead_time(scores, threshold, onset):
+    """Frames between the first alarm and the ground-truth failure onset.
+
+    Positive = the detector alarmed BEFORE the failure (warned early); negative =
+    it lagged. Returns None if there is no onset (onset < 0) or the detector never
+    alarms over the stream. `scores` are higher-is-OOD; an alarm is score>=threshold.
+    """
+    s = np.asarray(scores, dtype=np.float64)
+    if onset is None or onset < 0:
+        return None
+    alarms = np.where(s >= threshold)[0]
+    if alarms.size == 0:
+        return None
+    return int(onset - alarms[0])

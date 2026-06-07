@@ -93,3 +93,28 @@ def test_bootstrap_ci_brackets_point_estimate():
                                         n_bootstrap=300)
     assert lo <= point <= hi
     assert lo < hi
+
+
+from lib.metrics import lead_time
+
+
+def test_lead_time_positive_when_alarm_precedes_onset():
+    scores = np.zeros(100)
+    scores[45:] = 1.0
+    assert lead_time(scores, threshold=0.5, onset=50) == 5
+
+
+def test_lead_time_negative_when_alarm_lags_onset():
+    scores = np.zeros(100)
+    scores[55:] = 1.0
+    assert lead_time(scores, threshold=0.5, onset=50) == -5
+
+
+def test_lead_time_none_when_no_alarm():
+    scores = np.zeros(100)
+    assert lead_time(scores, threshold=0.5, onset=50) is None
+
+
+def test_lead_time_none_when_no_onset():
+    scores = np.ones(100)
+    assert lead_time(scores, threshold=0.5, onset=-1) is None
