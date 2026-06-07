@@ -26,6 +26,9 @@ src/*/build/
 src/*/install/
 src/*/log/
 
+# Internal AI-planning specs — keep out of the public flagship repo
+docs/superpowers/
+
 # OS / editor
 .DS_Store
 *.swp
