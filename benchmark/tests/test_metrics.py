@@ -118,3 +118,26 @@ def test_lead_time_none_when_no_alarm():
 def test_lead_time_none_when_no_onset():
     scores = np.ones(100)
     assert lead_time(scores, threshold=0.5, onset=-1) is None
+
+
+from lib.metrics import aggregate_seeds
+
+
+def test_aggregate_seeds_mean_std():
+    vals = [0.90, 0.92, 0.94, 0.96, 0.98]
+    agg = aggregate_seeds(vals)
+    assert abs(agg["mean"] - 0.94) < 1e-9
+    assert abs(agg["std"] - np.std(vals, ddof=1)) < 1e-9
+    assert agg["n"] == 5
+
+
+def test_aggregate_seeds_ignores_none():
+    agg = aggregate_seeds([0.9, None, 0.8, None])
+    assert agg["n"] == 2
+    assert abs(agg["mean"] - 0.85) < 1e-9
+
+
+def test_aggregate_seeds_all_none():
+    agg = aggregate_seeds([None, None])
+    assert agg["n"] == 0
+    assert agg["mean"] is None

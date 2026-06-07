@@ -193,3 +193,17 @@ def lead_time(scores, threshold, onset):
     if alarms.size == 0:
         return None
     return int(onset - alarms[0])
+
+
+def aggregate_seeds(values):
+    """Mean / sample-std / n over per-seed metric values, ignoring None entries.
+
+    Returns {"mean": float|None, "std": float, "n": int}. std uses ddof=1 (sample
+    std) and is 0.0 when fewer than 2 values are present.
+    """
+    vals = [float(v) for v in values if v is not None]
+    if not vals:
+        return {"mean": None, "std": 0.0, "n": 0}
+    arr = np.asarray(vals, dtype=np.float64)
+    std = float(np.std(arr, ddof=1)) if arr.size > 1 else 0.0
+    return {"mean": float(arr.mean()), "std": std, "n": int(arr.size)}
