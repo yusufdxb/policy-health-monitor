@@ -37,3 +37,5 @@ docs/superpowers/
 
 # Large generated benchmark embeddings (regenerate via extract_real_embeddings.py); fixture is committed
 benchmark/data/real_embeddings_seed*.npz
+
+.venv-bench/
