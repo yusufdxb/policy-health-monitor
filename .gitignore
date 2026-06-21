@@ -38,4 +38,10 @@ docs/superpowers/
 # Large generated benchmark embeddings (regenerate via extract_real_embeddings.py); fixture is committed
 benchmark/data/real_embeddings_seed*.npz
 
+# Real robomimic benchmark artifacts: regenerable rollout caches and the
+# downloaded model-zoo checkpoint (large binary, not source). The eval scripts
+# under benchmark/real/ are tracked; their cached inputs/outputs are not.
+benchmark/real/cache/
+benchmark/real/models/
+
 .venv-bench/
