@@ -1,10 +1,10 @@
-# benchmark/tests/test_labeling.py
 """Tests for the objective degeneration-labeling criterion.
 
 The label is computed from generated token ids only, independent of any OOD
 detector, so no detector grades its own homework.
 """
-from lib.labeling import failure_labels, ngram_repetition_rate
+import numpy as np
+from lib.labeling import ngram_repetition_rate, failure_labels
 
 
 def test_repetition_rate_all_repeat_is_one():

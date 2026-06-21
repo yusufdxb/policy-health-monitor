@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from phm_core.calibration import calibrate_threshold, rolling_spread
+from phm_core.calibration import calibrate_threshold, rolling_spread_early
 
 
 def phm_scores(features_id: np.ndarray, features_test: np.ndarray,
@@ -34,10 +34,12 @@ def phm_scores(features_id: np.ndarray, features_test: np.ndarray,
 
     Calibration is the rolling-spread threshold fit on ``features_id`` at the
     given ID percentile (default 1st percentile, the calibrate_threshold
-    default). Returns an array of len(features_test) with NaN before the window
-    fills.
+    default). Returns an array of len(features_test).
+
+    Uses ``rolling_spread_early`` to remove the warm-up dead-time, matching the
+    Hotelling-T2 baseline's windowing behavior.
     """
-    id_spread = rolling_spread(np.asarray(features_id, dtype=np.float64), window)
+    id_spread = rolling_spread_early(np.asarray(features_id, dtype=np.float64), window)
     thr = calibrate_threshold(id_spread, percentile=percentile)
-    test_spread = rolling_spread(np.asarray(features_test, dtype=np.float64), window)
+    test_spread = rolling_spread_early(np.asarray(features_test, dtype=np.float64), window)
     return (thr - test_spread).astype(np.float64)

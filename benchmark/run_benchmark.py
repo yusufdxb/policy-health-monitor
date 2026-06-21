@@ -37,7 +37,7 @@ from pathlib import Path
 
 import numpy as np
 
-from lib import baselines, metrics
+from lib import baselines, metrics, real_stream
 from lib.generator import StreamSpec, generate_stream, rolling_spread_trace
 from lib.phm_detector import phm_scores
 from lib.rnd import rnd_numpy
@@ -64,6 +64,12 @@ def _detectors(window: int) -> dict:
         "KNN (k=50, unnormalized)": lambda fid, ft: baselines.knn_distance(
             fid, ft, k=50, normalize=False),
         "RND (numpy)": lambda fid, ft: rnd_numpy(fid, ft),
+        "PCA-residual (k=8)": lambda fid, ft: baselines.pca_residual(
+            fid, ft, n_components=8),
+        "Hotelling-T2 (windowed)": lambda fid, ft: baselines.hotelling_t2_window(
+            fid, ft, window=window),
+        "Temporal-RND (w=8)": lambda fid, ft: baselines.temporal_rnd(
+            fid, ft, window=8, hidden=64, seed=0),
     }
 
 
@@ -314,14 +320,114 @@ def write_md(out: Path, reports: dict[str, dict]) -> None:
     out.write_text("\n".join(lines) + "\n")
 
 
+def run_real(seeds, window: int):
+    """Real-embedding benchmark on phi-2 hidden-state streams.
+
+    Methodology mirrors the synthetic harness's fit/eval discipline (no scoring of
+    the fit set) and scores each stream SEPARATELY so the temporal detectors are
+    not contaminated across a healthy->OOD junction:
+
+      - fit (calibration) = healthy stream of seed S
+      - ID test           = healthy stream of seed (S+1 mod len) -- a DIFFERENT
+                            generation, so the fit set is never scored as ID test
+      - OOD test:
+          collapse: the collapse stream of seed S, labelled PER-FRAME by the
+                    objective n-gram repetition criterion (coherent prefix = 0,
+                    degenerate tail = 1); lead-time uses its onset.
+          shift:    the shift stream of seed S, labelled 1 for all frames (the
+                    whole condition is OOD by construction; its repetition label
+                    is correctly ~0 so a per-frame degeneration label is N/A).
+
+    Lead-time is measured at a healthy-calibrated operating point: the threshold is
+    the 95th percentile of the ID (healthy) scores (FPR ~= 5%); lead-time is the
+    gap between the failure onset and the first frame the OOD score crosses it.
+    Returns (agg, used_seeds) where agg[name][metric][cond] is a per-seed list.
+    """
+    detectors = _detectors(window)
+    agg = {name: {"AUROC": {}, "leadtime": {}} for name in detectors}
+    paths = real_stream.seed_paths(seeds)
+    present = [(s, p) for s, p in zip(seeds, paths, strict=True) if p.exists()]
+    used = [s for s, _ in present]
+    loaded = {s: real_stream.load_real_stream(p) for s, p in present}
+
+    for idx, s in enumerate(used):
+        streams = loaded[s]
+        next_s = used[(idx + 1) % len(used)]
+        fid = streams["healthy"].feats
+        id_test = loaded[next_s]["healthy"].feats
+        for cond in ("collapse", "shift"):
+            ood = streams[cond]
+            if cond == "collapse":
+                ood_labels = ood.labels
+                onset = ood.onset
+            else:
+                ood_labels = np.ones(ood.feats.shape[0], dtype=np.int64)
+                onset = -1
+            for name, fn in detectors.items():
+                s_id = np.asarray(fn(fid, id_test), dtype=np.float64)
+                s_ood = np.asarray(fn(fid, ood.feats), dtype=np.float64)
+                scores = np.concatenate([s_id, s_ood])
+                labels = np.concatenate([
+                    np.zeros(len(s_id), dtype=np.int64), ood_labels])
+                agg[name]["AUROC"].setdefault(cond, []).append(
+                    metrics.auroc(scores, labels))
+                # lead-time at the healthy-calibrated FPR~=5% operating point
+                finite_id = s_id[np.isfinite(s_id)]
+                thr = float(np.quantile(finite_id, 0.95)) if finite_id.size else np.inf
+                agg[name]["leadtime"].setdefault(cond, []).append(
+                    metrics.lead_time(s_ood, thr, onset))
+    return agg, used
+
+
+def write_real_md(out: Path, agg: dict, used) -> None:
+    lines = [
+        "# Real-embedding benchmark (microsoft/phi-2)",
+        "",
+        "Per-token last-layer hidden states from phi-2 (2.7B, fp16, RTX 5070). "
+        "ID = coherent generation; collapse = degenerate repetition (objective "
+        "n-gram label, per-frame); shift = out-of-distribution prompt (whole "
+        "stream OOD). Fit on healthy(seed S), ID test = healthy(seed S+1) so the "
+        "fit set is never scored. Streams scored separately. Lead-time at the "
+        "healthy-calibrated FPR~5% operating point (frames; positive = warns "
+        "before onset).",
+        "",
+        f"Seeds: {used} (n={len(used)})",
+        "",
+        "| Detector | Condition | AUROC (mean +/- std) | Lead-time (mean frames) | n |",
+        "|---|---|---|---|---|",
+    ]
+    for name, d in agg.items():
+        for cond in ("collapse", "shift"):
+            a = metrics.aggregate_seeds(d["AUROC"].get(cond, []))
+            lt = metrics.aggregate_seeds(d["leadtime"].get(cond, []))
+            am = "n/a" if a["mean"] is None else f"{a['mean']:.3f} +/- {a['std']:.3f}"
+            lm = "n/a" if lt["mean"] is None else f"{lt['mean']:.1f}"
+            lines.append(f"| {name} | {cond} | {am} | {lm} | {a['n']} |")
+    out.write_text("\n".join(lines) + "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
+    p.add_argument("--real", action="store_true",
+                   help="run on real phi-2 embedding streams in benchmark/data/")
+    p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     p.add_argument("--dim", type=int, default=64)
     p.add_argument("--n", type=int, default=600, help="frames per class per stream")
     p.add_argument("--window", type=int, default=20)
     p.add_argument("--n-boot", type=int, default=1000)
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args(argv)
+
+    if args.real:
+        agg, used = run_real(args.seeds, window=args.window)
+        if not used:
+            print("no real-embedding .npz found in benchmark/data/ "
+                  "(run scripts/extract_real_embeddings.py first)")
+            return 1
+        out = HERE / "RESULTS_REAL.md"
+        write_real_md(out, agg, used)
+        print(f"wrote {out} (seeds={used})")
+        return 0
 
     scenarios = {
         "collapse OOD (frozen low-variance embedding)": StreamSpec(

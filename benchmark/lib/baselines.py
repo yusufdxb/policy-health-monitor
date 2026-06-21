@@ -206,11 +206,14 @@ def temporal_rnd(features_id, features_test, window: int = 8,
     Wid = windows(features_id)
     Wt = windows(features_test)
     in_dim = Wid.shape[1]
+    n = Wid.shape[0]
     proj = rng.normal(size=(in_dim, hidden)) / np.sqrt(in_dim)
     target_id = np.tanh(Wid @ proj)
     target_t = np.tanh(Wt @ proj)
     lam = 1e-2
-    A = Wid.T @ Wid + lam * np.eye(in_dim)
-    B = np.linalg.solve(A, Wid.T @ target_id)
-    pred_t = Wt @ B
+    # Dual ridge: solve the n x n system rather than the (window*d) x (window*d)
+    # one. Identical to the primal ridge B=(W^T W+lam I)^-1 W^T Y but tractable
+    # when n_frames << flattened-window dim (e.g. real 2560-dim embeddings).
+    alpha = np.linalg.solve(Wid @ Wid.T + lam * np.eye(n), target_id)
+    pred_t = (Wt @ Wid.T) @ alpha
     return np.sum((pred_t - target_t) ** 2, axis=1)
