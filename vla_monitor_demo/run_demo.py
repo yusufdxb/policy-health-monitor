@@ -32,24 +32,25 @@ def plot_matplotlib(res: SweepResult, out: Path) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-
+    import physx_style as _physx_style  # editorial-print theme
+    _physx_style.apply()
     fig, ax_left = plt.subplots(figsize=(8, 5), dpi=150)
 
     # Left axis: normalized output error and the monitor fired-fraction.
     ax_left.plot(
-        res.alphas, res.output_error, "o-", color="#d63a3a", lw=1.8,
+        res.alphas, res.output_error, "o-", color="#b0472b", lw=1.8,
         label="normalized output error",
     )
     ax_left.plot(
-        res.alphas, res.fired_fraction, "s-", color="#2b6cb0", lw=1.8,
+        res.alphas, res.fired_fraction, "s-", color="#2a78d6", lw=1.8,
         label="monitor fired fraction (frames below threshold)",
     )
     ax_left.axhline(
-        res.output_degradation_level, color="#d63a3a", lw=0.8, ls=":",
+        res.output_degradation_level, color="#b0472b", lw=0.8, ls=":",
         label=f"output degradation level ({res.output_degradation_level:.2f})",
     )
     ax_left.axhline(
-        res.monitor_fire_fraction, color="#2b6cb0", lw=0.8, ls=":",
+        res.monitor_fire_fraction, color="#2a78d6", lw=0.8, ls=":",
         label=(
             f"monitor tripwire ({res.monitor_fire_fraction:.2f}, "
             f"clean FPR={res.clean_fpr:.3f})"
@@ -62,11 +63,11 @@ def plot_matplotlib(res: SweepResult, out: Path) -> None:
     # Right axis: the raw OOD score (mean rolling spread) and the threshold line.
     ax_right = ax_left.twinx()
     ax_right.plot(
-        res.alphas, res.ood_score, "^--", color="#2f855a", lw=1.4, alpha=0.8,
+        res.alphas, res.ood_score, "^--", color="#1baf7a", lw=1.4, alpha=0.8,
         label="OOD score (mean rolling spread of hidden features)",
     )
     ax_right.axhline(
-        res.threshold, color="#2f855a", lw=1.0, ls="--",
+        res.threshold, color="#1baf7a", lw=1.0, ls="--",
         label=f"calibrated OOD threshold ({res.threshold:.4f})",
     )
     ax_right.set_ylabel("OOD score: mean rolling spread of policy embedding")
@@ -74,12 +75,12 @@ def plot_matplotlib(res: SweepResult, out: Path) -> None:
     # Vertical markers for the two firing alphas.
     if not np.isnan(res.monitor_fires_at):
         ax_left.axvline(
-            res.monitor_fires_at, color="#2b6cb0", lw=1.6,
+            res.monitor_fires_at, color="#2a78d6", lw=1.6,
             label=f"MONITOR fires @ alpha={res.monitor_fires_at:.2f}",
         )
     if not np.isnan(res.output_collapses_at):
         ax_left.axvline(
-            res.output_collapses_at, color="#d63a3a", lw=1.6,
+            res.output_collapses_at, color="#b0472b", lw=1.6,
             label=f"OUTPUT collapses @ alpha={res.output_collapses_at:.2f}",
         )
 
