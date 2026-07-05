@@ -2,7 +2,7 @@
 
 Date: 2026-05-30 (updated; original integration 2026-05-29)
 Stage: Track A fix pass (adversarial-review punch list) re-verified on top of Integrate
-Environment: mewtwo, ROS 2 Humble, Python 3.10.12, venv at `.venv` (numpy 1.26.4, pytest 9.0.3, ruff 0.15.10)
+Environment: dev workstation, ROS 2 Humble, Python 3.10.12, venv at `.venv` (numpy 1.26.4, pytest 9.0.3, ruff 0.15.10)
 
 ## Summary
 
