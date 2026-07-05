@@ -7,7 +7,7 @@
 // microseconds.
 //
 // IMPORTANT LABEL: these numbers are measured on this DESKTOP WORKSTATION CPU
-// (RTX 5070 build box), used here as a CPU proxy. They are NOT a Jetson Orin NX
+// (x86 build box), used here as a CPU proxy. They are NOT a Jetson Orin NX
 // measurement. A Jetson number would require running this same binary on the
 // Orin and will be slower per the Orin's lower single-core clock.
 #include <algorithm>
@@ -82,8 +82,8 @@ int main(int argc, char ** argv)
   mean /= static_cast<double>(us.size());
 
   std::printf("=== phm_ood_cpp rolling-spread latency micro-benchmark ===\n");
-  std::printf("HARDWARE: DESKTOP WORKSTATION CPU (AMD Ryzen 9 9900X, RTX 5070\n");
-  std::printf("          build box) - CPU proxy ONLY. This is NOT a Jetson Orin NX\n");
+  std::printf("HARDWARE: x86 DESKTOP WORKSTATION CPU\n");
+  std::printf("          (build box) - CPU proxy ONLY. This is NOT a Jetson Orin NX\n");
   std::printf("          number. Re-run this same binary on the Orin for an\n");
   std::printf("          embedded figure (expect it slower per the Orin's clock).\n");
   std::printf("backend          : %s (force with env PHM_BACKEND=plain|eigen)\n",
