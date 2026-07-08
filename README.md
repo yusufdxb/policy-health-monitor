@@ -88,8 +88,7 @@ ROS distro is sourced in the same shell.
 The full stack builds (`colcon`) and the pure-Python suite passes (290 tests). The benchmark
 runs on synthetic policy streams. On-device validation on a Jetson Orin (real-policy
 embeddings, on-device latency and false-positive rate, and an induced-failure hardware
-demo) is pending a compute target; the owed numbers and pre-flight are tracked in
-[docs/lab_card_pending_hardware.md](docs/lab_card_pending_hardware.md).
+demo) is pending a compute target.
 
 ## License
 

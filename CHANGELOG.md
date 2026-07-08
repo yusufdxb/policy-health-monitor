@@ -23,5 +23,4 @@ First public release.
   a threshold-free reliability benchmark vs Mahalanobis / RMD / KNN / RND, and a C++
   `rclcpp` runtime node (plain / Eigen / LibTorch backends).
 - On-device validation on a Jetson Orin (real-policy embeddings, on-device latency / FPR,
-  induced-failure hardware demo) remains pending a compute target. See
-  `docs/lab_card_pending_hardware.md`.
+  induced-failure hardware demo) remains pending a compute target.
