@@ -26,7 +26,7 @@ worst-wins arbiter to the recovery layer) is in
 | `phm_ood` | OOD scoring on policy internals. |
 | `phm_arbiter` | Worst-wins arbiter that fuses detector verdicts + node/sensor health into one `PolicyHealthStatus` (total ordering, stale-critical safety). |
 | `phm_recovery` | Safe-fallback layer (`cmd_vel` hold + rewind hook). |
-| `phm_ood_cpp` | C++ `rclcpp` runtime node with plain / Eigen / LibTorch backends. |
+| `phm_ood_cpp` | C++ managed-lifecycle `rclcpp` runtime node with plain / Eigen / LibTorch backends. |
 | `phm_sim` | Synthetic policy-stream harness for end-to-end tests. |
 
 ## Benchmark
@@ -66,7 +66,32 @@ git clone https://github.com/yusufdxb/policy-health-monitor.git
 cd policy-health-monitor
 source /opt/ros/humble/setup.bash
 colcon build
+source install/setup.bash
+repo_dir=$PWD
+cd "$(mktemp -d)"
+python3 "$repo_dir/scripts/check_install_imports.py"
 ```
+
+The install-import smoke verifies that `phm_core` and the rclpy wrapper modules are
+visible from the ament index and import after the colcon overlay is sourced. It also
+fails if `PYTHONPATH` or pre-import `sys.path` points directly at PHM source package
+roots, which catches regressions back to manual source-tree path setup. It also asserts
+that `phm_msgs` and `phm_ood_cpp` resolve through the ament index.
+
+### Running the C++ detector
+
+`phm_ood_cpp`'s `ood_node` is a managed lifecycle node, so it does not publish until it
+has been configured and activated. Parameters are read once in `on_configure`:
+
+```bash
+ros2 run phm_ood_cpp ood_node --ros-args -p window:=30 -p threshold:=0.05
+# in another shell:
+ros2 lifecycle set /phm_ood_cpp configure
+ros2 lifecycle set /phm_ood_cpp activate
+```
+
+Embedding frames that arrive while the node is not ACTIVE are dropped, and deactivating
+clears the rolling window so a re-activation never blends pre- and post-activation state.
 
 ## Development
 
@@ -83,12 +108,23 @@ run fast without `rclpy`. The ROS 2 nodes are thin wrappers and build with `colc
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` flag avoids ROS's `launch_testing` pytest plugin when a
 ROS distro is sourced in the same shell.
 
+After a colcon build, run the install-space import guard:
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+repo_dir=$PWD
+cd "$(mktemp -d)"
+python3 "$repo_dir/scripts/check_install_imports.py"
+```
+
 ## Status
 
-The full stack builds (`colcon`) and the pure-Python suite passes (290 tests). The benchmark
-runs on synthetic policy streams. On-device validation on a Jetson Orin (real-policy
-embeddings, on-device latency and false-positive rate, and an induced-failure hardware
-demo) is pending a compute target; the owed numbers and pre-flight are tracked in
+The full stack builds (`colcon`), the colcon install overlay passes the import smoke, and
+the pure-Python suite passes. The benchmark runs on synthetic policy streams. On-device
+validation on Jetson-class compute with real-policy embeddings, on-device latency and
+false-positive rate, and an induced-failure hardware demo is pending a compute target;
+the owed numbers and pre-flight are tracked in
 [docs/lab_card_pending_hardware.md](docs/lab_card_pending_hardware.md).
 
 ## License

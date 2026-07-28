@@ -1,23 +1,25 @@
 # Policy Health Monitor: Track A Integration and Build Report
 
-Date: 2026-05-30 (updated; original integration 2026-05-29)
-Stage: Track A fix pass (adversarial-review punch list) re-verified on top of Integrate
+Date: 2026-05-30 (updated 2026-07-14; original integration 2026-05-29)
+Stage: Track A fix pass re-verified on top of Integrate
 Environment: dev workstation, ROS 2 Humble, Python 3.10.12, venv at `.venv` (numpy 1.26.4, pytest 9.0.3, ruff 0.15.10)
 
 ## Summary
 
 | Gate | Result |
 |---|---|
-| `colcon build` (6 packages, clean) | PASS, exit 0, `Summary: 6 packages finished` |
-| `pytest src -q` (pure-Python suite) | PASS, `255 passed` (was 179 at integrate, 184/4-fail at start of fix pass) |
+| `colcon build` (8 packages, clean) | PASS, exit 0, `Summary: 8 packages finished` |
+| install-overlay import smoke | PASS, `Install import smoke PASSED` |
+| `colcon test` | PASS, `40 tests, 0 errors, 0 failures, 0 skipped` |
+| pure-Python suite (2026-07-27 rerun) | PASS, `290 passed` (was 255 at this report's original date, 179 at integrate) |
 | `ruff check src/` | PASS, `All checks passed!` |
 | Overall | GREEN |
 
-## Fix pass (2026-05-30): adversarial-review punch list
+## Fix pass (2026-05-30): safety punch list
 
 The fix pass implemented the LOCKED safety decisions from
 `docs/REVIEW_PUNCHLIST.md` and re-verified all three gates. Test count rose from
-179 (integrate) to 255 as new safety regression and seam-integration tests were
+179 (integrate) to 255 as new safety regression and integration tests were
 added (4 old arbiter tests that encoded the OLD unsafe stale-downgrade behavior
 were rewritten to assert the new fail-safe contract):
 
@@ -33,7 +35,7 @@ were rewritten to assert the new fail-safe contract):
 - D8 phm_detectors broken subscription replaced with ROS-graph type resolution +
   explicit QoS; STRING_ARRAY params fixed so configured topics are accepted; node
   verified to construct live with `freq_topics=[/scan] dead_topics=[/odom]`.
-- D9 package.xml dependency fixes + CI now builds and tests all 6 packages.
+- D9 package.xml dependency fixes + CI now builds and tests the ROS workspace.
 
 ## 1. Environment
 
@@ -51,13 +53,37 @@ pip-installed into the venv; the per-package `conftest.py` files inject
 `src/phm_core` onto `sys.path` for test collection, so this is expected and tests
 pass without an editable install.
 
+2026-07-14 update: `phm_core` is now discovered by `colcon list` as an
+`ament_python` package and imports from the sourced colcon overlay. A dedicated
+install smoke script was added so CI catches any regression back to manual
+source-tree path setup.
+
 ## 2. colcon build
 
-Command (run from the repo root after `source /opt/ros/humble/setup.bash`, with the
-go2_ws overlay unset so it does not interfere):
+Command (run from the repo root after `source /opt/ros/humble/setup.bash`, with any
+unrelated overlay unset so it does not interfere):
 
 ```
 colcon build
+```
+
+2026-07-14 targeted runtime-packaging recheck:
+
+```
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install --packages-select \
+  phm_core phm_detectors phm_ood phm_arbiter phm_recovery phm_sim
+source install/setup.bash
+repo_dir=$PWD
+cd "$(mktemp -d)"
+python3 "$repo_dir/scripts/check_install_imports.py"
+```
+
+Observed result:
+
+```
+Summary: 6 packages finished [2.42s]
+Install import smoke PASSED
 ```
 
 Final output tail (clean `rm -rf build install log && colcon build`, 2026-05-30 fix pass):
@@ -108,10 +134,12 @@ phm_recovery   -> recovery_node
 phm_sim        -> embedding_publisher
 ```
 
-All five node modules import cleanly (phm_msgs from the install space, phm_core from
-`src` on PYTHONPATH): `phm_ood.node`, `phm_arbiter.arbiter_node`,
+All five node modules import cleanly from the sourced colcon overlay:
+`phm_ood.node`, `phm_arbiter.arbiter_node`,
 `phm_detectors.phm_detectors_node`, `phm_recovery.recovery_node`,
-`phm_sim.embedding_publisher_node`.
+`phm_sim.embedding_publisher_node`. The 2026-07-14 smoke check verifies these
+imports from a temporary directory after `install/setup.bash` is sourced, so they
+do not depend on the current working directory being the repository root.
 
 ## 3. Integration fixes applied (no logic redesign)
 
@@ -202,20 +230,74 @@ All checks passed!
 
 No lint fixes were required.
 
-## 6. Packages left red
+## 6. Install-overlay import smoke
 
-None. All six colcon packages build and all six pure-Python test suites pass.
+Command:
 
-## 7. Honest caveats (not build blockers)
+```
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+repo_dir=$PWD
+cd "$(mktemp -d)"
+python3 "$repo_dir/scripts/check_install_imports.py"
+```
 
-- `phm_core` is not installed into the colcon install space (it is a pure pip
-  package). The rclpy nodes `import phm_core` at runtime, so a live `ros2 run` of
-  `phm_ood`, `phm_detectors`, or `phm_recovery` needs `phm_core` on `PYTHONPATH`
-  (via the venv, an editable install, or a future ament wrapper). This is a runtime
-  deployment detail, not a build or test failure, and the spec gates (colcon build +
-  pytest) are met. ASSUMPTION: a launch-time PYTHONPATH or editable install of
-  phm_core is acceptable for v0; if the user wants phm_core in the install space, it
-  should be repackaged as an ament_python package in a follow-up.
+Expected output tail:
+
+```
+ament OK: phm_msgs -> .../install/phm_msgs/share/phm_msgs
+ament OK: phm_ood_cpp -> .../install/phm_ood_cpp/share/phm_ood_cpp
+ament OK: phm_core -> .../install/phm_core/share/phm_core
+import OK: phm_msgs.msg -> ...
+import OK: phm_core -> ...
+import OK: phm_ood.node -> ...
+Install import smoke PASSED
+```
+
+All eight colcon packages must be visible in the ament index, and every Python
+module (including the rosidl-generated `phm_msgs.msg`, which has no source-tree
+fallback) must import from outside the repository after the overlay is sourced.
+The exact Python module path may be under `src/` for `--symlink-install` builds
+or under `install/` for a regular install. The script also fails if `PYTHONPATH`
+or pre-import `sys.path` points directly at PHM source package roots.
+
+## 7. C++ lifecycle node (phm_ood_cpp)
+
+`ood_node` is a `rclcpp_lifecycle::LifecycleNode`. Parameters are declared
+read-only in the constructor and consumed in `on_configure`; the verdict
+publisher is a managed publisher so it emits only while ACTIVE; `on_deactivate`
+calls the new `OodCore::reset()` so a re-activation starts from an empty window
+rather than blending pre- and post-activation frames.
+
+Verified 2026-07-27 on a live ROS graph (`ros2 run` plus `ros2 lifecycle`):
+
+```
+unconfigured [1] -> configure -> activate -> active [3] -> deactivate -> inactive [2]
+[INFO] [phm_ood_cpp]: configured: backend=eigen window=4 threshold=0.0500 ...
+[INFO] [phm_ood_cpp]: activated: publishing verdicts
+[INFO] [phm_ood_cpp]: deactivated: dropping frames, window reset
+```
+
+Gating was checked with a live `/policy/embedding` publisher at 10 Hz: while the
+node was configured-but-INACTIVE, `ros2 topic echo /phm/verdicts --once` timed
+out with no output; after `activate` it returned a verdict
+(`source: phm_ood_cpp`, `violating: true`). `OodCore::reset()` is covered by the
+gtest `OodCoreTest.ResetClearsRollingState`; the phm_ood_cpp gtest binary reports
+8 tests, 0 failures.
+
+## 8. Packages left red
+
+None. All eight colcon packages build. The six pure-Python package suites pass under
+the repo-level pytest command (290 passed). `colcon test` reports 40 tests, 0 failures.
+
+## 9. Honest caveats (not build blockers)
+
+- `phm_core` is now an `ament_python` package in the colcon workspace and the
+  rclpy wrappers import it from the sourced install overlay. CI runs
+  `scripts/check_install_imports.py` after `colcon build` to preserve that
+  contract. This does not validate a live ROS graph or robot behavior.
 - This build certifies LOGIC only (sim-certifiable), never physics or hardware
-  behavior, per spec section 2. No end-to-end ROS graph run with live publishers was
-  exercised in this stage; node-module imports and message round-trips were verified.
+  behavior, per spec section 2. The only live-graph exercise is the single-node
+  lifecycle and gating check in section 7; the full multi-node pipeline
+  (detectors -> arbiter -> recovery) has not been run end to end with live
+  publishers, and no robot or Jetson-class device was involved.

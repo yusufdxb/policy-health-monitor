@@ -19,7 +19,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy==1.26.4 pytest ruff
       - name: Ruff lint
-        run: ruff check src/phm_core
+        run: ruff check src/ scripts/
       - name: Pytest (ROS-free packages + benchmark)
         run: |
           python -m pytest \
@@ -58,11 +58,27 @@ jobs:
       image: ros:humble
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve declared dependencies with rosdep
+        # Fails on any package.xml key that is not a real rosdep key, and pulls
+        # in deps the base image may not carry (for example rclcpp_lifecycle).
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          apt-get update
+          rosdep update --rosdistro humble
+          rosdep install --from-paths src --ignore-src -y --rosdistro humble
       - name: Build all packages
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
           colcon build
+      - name: Import smoke from install overlay
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          cd "$(mktemp -d)"
+          python3 "$GITHUB_WORKSPACE/scripts/check_install_imports.py"
       - name: Run package tests
         shell: bash
         run: |
