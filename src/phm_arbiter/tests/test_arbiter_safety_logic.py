@@ -1,8 +1,7 @@
 """Safety-logic regression tests for phm_arbiter._core.arbitrate().
 
-These tests target the adversarial-review (skeptic-core) findings in
-docs/REVIEW_PUNCHLIST.md. They reproduce the exact verified inputs from that
-punch list and assert the LOCKED fail-safe behavior:
+These tests target the adversarial-review findings from the Track A review.
+They reproduce the exact verified inputs from that review and assert the LOCKED fail-safe behavior:
 
 1. STALENESS never de-escalates a violating verdict (stale + violating +
    score>=0.80 stays STOP).

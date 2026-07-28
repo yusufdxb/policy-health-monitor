@@ -32,8 +32,6 @@ def plot_matplotlib(res: SweepResult, out: Path) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import physx_style as _physx_style  # editorial-print theme
-    _physx_style.apply()
     fig, ax_left = plt.subplots(figsize=(8, 5), dpi=150)
 
     # Left axis: normalized output error and the monitor fired-fraction.
