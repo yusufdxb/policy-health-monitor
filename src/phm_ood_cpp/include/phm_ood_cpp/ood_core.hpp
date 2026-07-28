@@ -69,6 +69,12 @@ public:
   // Feed one embedding frame; returns the verdict for this frame.
   VerdictData update(const std::vector<float> & embedding, const std::string & policy_id);
 
+  // Drop all rolling state: window, frame counter, hysteresis run, cached
+  // verdict, and the fixed dimension. Used when a lifecycle deactivation must
+  // guarantee a clean window on the next activation. Threshold/window/backend
+  // config is preserved.
+  void reset();
+
   double last_spread() const { return last_spread_; }
   const std::string & backend_name() const { return backend_name_; }
   std::size_t window() const { return window_; }

@@ -12,6 +12,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(phm_msgs REQUIRED)
 
 # --------------------------------------------------------------------------
@@ -99,7 +100,7 @@ endif()
 # --------------------------------------------------------------------------
 add_executable(ood_node src/ood_node.cpp)
 target_link_libraries(ood_node phm_ood_core)
-ament_target_dependencies(ood_node rclcpp phm_msgs)
+ament_target_dependencies(ood_node rclcpp rclcpp_lifecycle phm_msgs)
 
 # --------------------------------------------------------------------------
 # Latency micro-benchmark (standalone, no ROS).

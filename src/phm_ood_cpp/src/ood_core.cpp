@@ -54,6 +54,18 @@ OodCore::OodCore(
   buffer_.reserve(window_);
 }
 
+void OodCore::reset()
+{
+  buffer_.clear();
+  buffer_.reserve(window_);
+  dim_ = 0;
+  frame_count_ = 0;
+  last_spread_ = 0.0;
+  have_last_ = false;
+  last_verdict_ = VerdictData{};
+  hysteresis_.reset();
+}
+
 VerdictData OodCore::ok_verdict(const std::string & reason) const
 {
   VerdictData v;

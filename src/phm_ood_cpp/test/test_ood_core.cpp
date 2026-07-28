@@ -124,6 +124,32 @@ TEST(OodCoreTest, InDistributionIsHealthy)
   EXPECT_EQ(v.suggested_action, phm_ood_cpp::ACTION_NONE);
 }
 
+// reset() drops the rolling window, the hysteresis run, and the pinned
+// dimension, so a re-activated node warms up again instead of blending a stale
+// context into the new one. Config (window/threshold) is preserved.
+TEST(OodCoreTest, ResetClearsRollingState)
+{
+  OodCore core(3, /*threshold=*/0.5, /*min_consecutive=*/1,
+               /*compute_every=*/1, make_plain_backend());
+  const std::vector<float> e{1.0f, 2.0f};
+  core.update(e, "p");
+  core.update(e, "p");
+  const auto full = core.update(e, "p");  // buffer full -> real verdict
+  EXPECT_TRUE(full.violating);
+
+  // Without a reset, changing the embedding dimension is a hard error.
+  EXPECT_THROW(core.update(std::vector<float>{1.0f, 2.0f, 3.0f}, "p"), std::invalid_argument);
+
+  core.reset();
+  EXPECT_EQ(core.window(), static_cast<std::size_t>(3));  // config preserved
+
+  // Post-reset the buffer is empty again, so the next frame must warm up, and
+  // the pinned dimension is cleared so a new dimension is accepted.
+  const auto after = core.update(std::vector<float>{1.0f, 2.0f, 3.0f}, "p");
+  EXPECT_FALSE(after.violating);
+  EXPECT_NE(after.reason.find("warming up: 1/3"), std::string::npos);
+}
+
 int main(int argc, char ** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
