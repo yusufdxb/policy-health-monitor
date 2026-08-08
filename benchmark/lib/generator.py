@@ -1,7 +1,7 @@
 """In-distribution vs OOD embedding-stream generator for the benchmark.
 
 Reuses the (in_dist, ood) generator concept from
-``/home/yusuf/Projects/policy-health-monitor/src/phm_sim/phm_sim/_sim_core.py:25-65``
+``src/phm_sim/phm_sim/_sim_core.py``
 (``generate_embeddings``): the in-distribution stream is a stable multivariate
 Gaussian with a healthy rolling spread, and the OOD stream is a collapsed,
 near-zero-variance embedding. This module generalises it for the benchmark:

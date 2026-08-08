@@ -8,9 +8,6 @@ Single-writer invariant: exactly one instance of this node publishes
 ``/phm/health`` (mirrors HELIX safety_envelope_node single-publisher contract,
 ported from helix_recovery/recovery_node.py:142 in the HELIX repo).
 
-Spec reference: docs/superpowers/specs/2026-05-29-policy-health-monitor-design.md
-section 3.3.
-
 Topics:
   Subscribed:  /phm/verdicts  (phm_msgs/DetectorVerdict)
                QoS: reliable, keep_last 10

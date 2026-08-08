@@ -6,10 +6,9 @@
 // hysteresis + verdict build) and reports median and p99 per-frame latency in
 // microseconds.
 //
-// IMPORTANT LABEL: these numbers are measured on this DESKTOP WORKSTATION CPU
-// (x86 build box), used here as a CPU proxy. They are NOT a Jetson Orin NX
-// measurement. A Jetson number would require running this same binary on the
-// Orin and will be slower per the Orin's lower single-core clock.
+// IMPORTANT LABEL: these are host-only CPU micro-benchmark results. They are
+// not target-platform or end-to-end ROS latency measurements. Record the host,
+// load, and run configuration separately before citing a result.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -82,10 +81,7 @@ int main(int argc, char ** argv)
   mean /= static_cast<double>(us.size());
 
   std::printf("=== phm_ood_cpp rolling-spread latency micro-benchmark ===\n");
-  std::printf("HARDWARE: x86 DESKTOP WORKSTATION CPU\n");
-  std::printf("          (build box) - CPU proxy ONLY. This is NOT a Jetson Orin NX\n");
-  std::printf("          number. Re-run this same binary on the Orin for an\n");
-  std::printf("          embedded figure (expect it slower per the Orin's clock).\n");
+  std::printf("SCOPE: host-only CPU micro-benchmark; not target-platform or ROS latency\n");
   std::printf("backend          : %s (force with env PHM_BACKEND=plain|eigen)\n",
               core.backend_name().c_str());
   std::printf("frames (N)       : %zu\n", n);

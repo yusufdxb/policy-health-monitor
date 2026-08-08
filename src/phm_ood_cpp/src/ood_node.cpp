@@ -90,6 +90,20 @@ public:
     const int compute_every =
       static_cast<int>(get_parameter("compute_every").as_int());
 
+    // A non-positive threshold makes the detector permanently inert: the OOD
+    // test is `spread < threshold`, and spread is a sum of variances, so it is
+    // never negative. The node would configure, activate, consume embeddings
+    // and publish healthy verdicts forever while monitoring nothing. That is
+    // indistinguishable from a working monitor, so say so unmistakably rather
+    // than letting the default value pass silently.
+    if (threshold <= 0.0) {
+      RCLCPP_WARN(
+        get_logger(),
+        "threshold=%.6f is non-positive: the detector is INERT and will never "
+        "flag OOD. Set the 'threshold' parameter from a calibration run.",
+        threshold);
+    }
+
     try {
       core_ = std::make_unique<OodCore>(
         static_cast<std::size_t>(window), threshold, min_consecutive,
@@ -100,9 +114,17 @@ public:
     }
 
     // Explicit QoS. Embeddings are a high-rate sensor-like stream: keep-last
-    // depth 10, reliable, volatile. Verdicts: keep-last 10, reliable, volatile
-    // so a late-joining arbiter does not replay stale faults.
-    const rclcpp::QoS emb_qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile();
+    // depth 10, BEST_EFFORT, volatile. Verdicts: keep-last 10, reliable,
+    // volatile so a late-joining arbiter does not replay stale faults.
+    //
+    // The subscriber must stay BEST_EFFORT to match the Python node
+    // (phm_ood/node.py _SUB_QOS). It was previously RELIABLE, which is
+    // incompatible with a BEST_EFFORT publisher: the node would then receive
+    // zero frames and publish zero verdicts, which is indistinguishable from
+    // "everything is healthy" to an operator. A BEST_EFFORT subscriber accepts
+    // both publisher kinds, so this is strictly the safer of the two.
+    const rclcpp::QoS emb_qos =
+      rclcpp::QoS(rclcpp::KeepLast(10)).best_effort().durability_volatile();
     const rclcpp::QoS verdict_qos =
       rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile();
 

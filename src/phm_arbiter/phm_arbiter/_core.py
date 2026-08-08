@@ -4,9 +4,6 @@ This module contains NO rclpy imports. All ROS 2 coupling lives in
 ``arbiter_node.py``. Tests import only this file so they run without a ROS
 graph.
 
-Spec reference: docs/superpowers/specs/2026-05-29-policy-health-monitor-design.md
-section 3.3 (phm_arbiter fusion rule).
-
 Worst-wins rule:
 1. Collect the latest DetectorVerdictData from every registered source within a
    staleness window (staleness_sec, default 1.0 s).
@@ -52,7 +49,7 @@ ARBITER_ALLOWLIST: frozenset[int] = frozenset(
 # severity.py). Staleness is a data-quality issue, so a *non-violating* stale
 # verdict is exactly DEGRADED. But staleness must never DE-escalate a violating
 # verdict: a stale-but-violating verdict keeps the worse of (the stale floor,
-# its own live severity). See LOCKED decision 1 in the review punch list.
+# its own live severity).
 # _STALE_SCORE must equal severity.DEGRADED_THRESHOLD; it is the band lower edge,
 # NOT 0.5/INTERVENE.
 _STALE_SCORE = 0.25  # = DEGRADED_THRESHOLD; lower edge of the DEGRADED band
@@ -61,7 +58,6 @@ _STALE_ACTION = ACTION_LOG_ONLY
 # Sentinel score used when a verdict carries a non-finite (NaN/inf) score. A
 # poisoned detector is treated as DEGRADED with this finite sentinel so it can
 # never pin the monitor to STOP-with-NaN nor make worst-wins non-deterministic.
-# See LOCKED decision 6 in the review punch list.
 _BAD_SCORE_SENTINEL = 0.5
 
 

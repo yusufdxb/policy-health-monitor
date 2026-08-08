@@ -95,10 +95,9 @@ measured lead-time is non-negative so the README cannot silently overclaim.
 /usr/bin/python3 -m pytest vla_monitor_demo -q     # 13 tests
 ```
 
-System python (`/usr/bin/python3`) with torch 2.11.0+cu128, numpy 2.2.6,
-matplotlib 3.10.8. No pip installs. matplotlib was available, so `alpha_sweep.png`
-is rendered with it; the raw sweep is also dumped to `alpha_sweep.csv`. If
-matplotlib were absent, `run_demo.py` writes the CSV and skips the PNG.
+The demo requires Python, PyTorch, NumPy, and optionally Matplotlib. When
+Matplotlib is available, `alpha_sweep.png` is rendered; the raw sweep is always
+written to `alpha_sweep.csv`.
 
 ## Reused math and phantom-braking citation
 
@@ -109,8 +108,7 @@ The OOD math is NOT duplicated here. The harness inserts
 - `phm_core.calibration.calibrate_threshold`
 
 `phm_core/phm_core/calibration.py` ports those byte-faithfully from
-phantom-braking (its module docstring cites
-`/home/yusuf/Projects/phantom-braking/src/e6_detector.py:16-53`).
+the public Phantom-Braking `src/e6_detector.py` implementation.
 
 Phantom-braking citation (read-only, not modified):
 

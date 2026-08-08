@@ -20,6 +20,8 @@ jobs:
           python -m pip install numpy==1.26.4 pytest ruff
       - name: Ruff lint
         run: ruff check src/ scripts/
+      - name: Public repository hygiene
+        run: python scripts/check_public_hygiene.py
       - name: Pytest (ROS-free packages + benchmark)
         run: |
           python -m pytest \

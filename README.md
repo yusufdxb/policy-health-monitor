@@ -121,9 +121,9 @@ python3 "$repo_dir/scripts/check_install_imports.py"
 ## Status
 
 The full stack builds (`colcon`), the colcon install overlay passes the import smoke, and
-the pure-Python suite passes (290 tests). The benchmark runs on synthetic policy streams.
-On-device validation on a Jetson Orin (real-policy embeddings, on-device latency and
-false-positive rate, and an induced-failure hardware demo) is pending a compute target.
+the pure-Python suite passes (295 tests). The benchmark runs on synthetic policy streams.
+Target-platform validation with real-policy embeddings, on-device latency and
+false-positive rate, and an induced-failure hardware demo remains pending.
 
 ## License
 

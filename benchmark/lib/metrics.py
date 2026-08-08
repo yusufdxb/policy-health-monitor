@@ -1,15 +1,13 @@
 """Threshold-free OOD detection metrics and bootstrap confidence intervals.
 
-Ported (re-implemented, not cross-imported) from
-``/home/yusuf/Projects/phantom-braking/src/metrics.py:1-118``.
+Reimplemented, rather than cross-imported, from the public Phantom-Braking
+``src/metrics.py`` module.
 
-Divergence from the source, intentional and environment-driven: the source
-wraps ``sklearn.metrics`` (``roc_auc_score``, ``average_precision_score``,
-``roc_curve``, ``precision_recall_curve``). The benchmark venv has numpy but
-NOT scikit-learn (verified: ``import sklearn`` -> ModuleNotFoundError), and the
-sandbox has no PyPI access, so this module re-implements the same three metrics
-(AUROC, AUPR, FPR@95TPR) and the stratified bootstrap CI in pure numpy. The
-definitions match sklearn's:
+The source wraps ``sklearn.metrics`` (``roc_auc_score``,
+``average_precision_score``, ``roc_curve``, ``precision_recall_curve``). This
+module keeps the benchmark dependency-light by implementing the same three
+metrics (AUROC, AUPR, FPR@95TPR) and stratified bootstrap confidence intervals
+in NumPy. The definitions match sklearn's:
 
 - AUROC: Mann-Whitney-U / rank-based area under the ROC curve, midrank tie
   handling (identical to ``roc_auc_score`` for binary labels).

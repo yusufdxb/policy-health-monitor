@@ -15,7 +15,7 @@
 
     # Optional path to a .npz file with key 'threshold'.
     # If non-empty, this overrides the 'threshold' parameter above.
-    # Example: "/home/yusuf/Projects/policy-health-monitor/calibration/phoenix_threshold.npz"
+    # Example: "calibration/policy_threshold.npz"
     calibration_file: ""
 
     # Consecutive violating frames required before the verdict flips to
@@ -27,5 +27,5 @@
     compute_every: 1
 
     # Expected embedding dimension for input validation. 0 = skip validation.
-    # Set to the policy's hidden state dim (e.g. 512 for phoenix / supercombo).
+    # Set to the policy's hidden state dimension (for example, 512).
     embed_dim: 0
