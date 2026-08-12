@@ -383,7 +383,7 @@ class TestIntegration:
 
 
 # ---------------------------------------------------------------------------
-# RecurrentTemporalSpreadAdapter tests (Phantom-Braking E6)
+# RecurrentTemporalSpreadAdapter tests (supercombo-blindspot E6)
 # ---------------------------------------------------------------------------
 
 _EMB_TOPIC = "/policy/embedding"
@@ -425,7 +425,7 @@ class TestRecurrentTemporalSpreadRegistration:
 
 
 class TestRecurrentTemporalSpreadNumerics:
-    """rolling_spread matches the Phantom-Braking reference on a fixed input,
+    """rolling_spread matches the supercombo-blindspot reference on a fixed input,
     and threshold calibration returns a sane percentile."""
 
     def test_rolling_spread_matches_reference_fixed_input(self):
@@ -440,14 +440,14 @@ class TestRecurrentTemporalSpreadNumerics:
         assert np.isnan(s[0]) and np.isnan(s[1])
         assert s[2] == pytest.approx(2.0 / 3.0)
         assert s[3] == pytest.approx(8.0 / 3.0)
-        # Cross-check against the definition used in the Phantom-Braking source
+        # Cross-check against the definition used in the supercombo-blindspot source
         # (e6_detector.py:22): float(np.var(window, axis=0).sum()).
         assert s[2] == pytest.approx(float(np.var(H[0:3], axis=0).sum()))
         assert s[3] == pytest.approx(float(np.var(H[1:4], axis=0).sum()))
 
     def test_adapter_last_spread_matches_rolling_spread(self):
         # The adapter's per-window spread equals rolling_spread()[-1] on the
-        # same window, i.e. it is the same math as the Phantom-Braking source.
+        # same window, i.e. it is the same math as the supercombo-blindspot source.
         rng = np.random.default_rng(7)
         window = 8
         frames = rng.normal(size=(window, 5))
@@ -461,7 +461,7 @@ class TestRecurrentTemporalSpreadNumerics:
 
     def test_calibrate_threshold_is_sane_percentile(self):
         # At the 1st percentile, ~1% of in-distribution frames fall below the
-        # threshold (the Phantom-Braking calibration property). Use enough
+        # threshold (the supercombo-blindspot calibration property). Use enough
         # frames that the empirical fraction is stable.
         rng = np.random.default_rng(0)
         window = 30

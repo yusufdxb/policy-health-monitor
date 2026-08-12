@@ -1,6 +1,6 @@
 """Canonical post-hoc feature-space OOD baselines.
 
-Reimplemented, rather than cross-imported, from the public Phantom-Braking
+Reimplemented, rather than cross-imported, from the public supercombo-blindspot
 ``src/baselines.py`` module:
 
 - ``_fit_gaussian``                  <- baselines.py:112-131
@@ -14,7 +14,7 @@ source convention so a single threshold (real-data high-quantile) holds.
 
 The PHM rolling-spread detector under test flips this internally (lower spread
 = more OOD); the harness converts it to higher-is-OOD by negation before
-computing metrics, exactly as the phantom-braking baselines_results.md report
+computing metrics, exactly as the supercombo-blindspot baselines_results.md report
 converts both to a common direction.
 
 ViM / MSP / Energy are N/A in this regression / embedding setting: there are no

@@ -1,6 +1,6 @@
-"""Rolling-spread OOD calibration, ported from Phantom-Braking.
+"""Rolling-spread OOD calibration, ported from supercombo-blindspot.
 
-Adapted from the public Phantom-Braking ``src/e6_detector.py`` module
+Adapted from the public supercombo-blindspot ``src/e6_detector.py`` module
 (functions ``rolling_spread``, ``calibrate_threshold``, ``loco_fpr``).
 
 The math here is byte-faithful to that source. The OOD signal is the per-frame

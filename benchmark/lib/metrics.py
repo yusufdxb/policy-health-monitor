@@ -1,6 +1,6 @@
 """Threshold-free OOD detection metrics and bootstrap confidence intervals.
 
-Reimplemented, rather than cross-imported, from the public Phantom-Braking
+Reimplemented, rather than cross-imported, from the public supercombo-blindspot
 ``src/metrics.py`` module.
 
 The source wraps ``sklearn.metrics`` (``roc_auc_score``,

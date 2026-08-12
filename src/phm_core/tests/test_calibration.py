@@ -1,4 +1,4 @@
-"""Parity tests for the rolling-spread calibration ported from Phantom-Braking.
+"""Parity tests for the rolling-spread calibration ported from supercombo-blindspot.
 
 Fixture values were hand-computed and cross-checked against the source math (see
 e6_detector.py:16-53). Each expected number below is derived by hand in the

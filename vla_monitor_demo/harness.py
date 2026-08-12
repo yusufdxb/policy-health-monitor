@@ -11,7 +11,7 @@ in-script (seconds), then sweep an input-perturbation strength alpha from 0.0 to
       hidden-layer features (the "policy embedding").
 
 The OOD threshold is calibrated on the alpha=0 (clean) features using
-``calibrate_threshold``. The headline question, mirroring the phantom-braking
+``calibrate_threshold``. The headline question, mirroring the supercombo-blindspot
 alpha sweep, is whether the monitor crosses its threshold at a LOWER alpha than
 the output crosses a degradation level: positive lead-time = early warning.
 
@@ -28,14 +28,14 @@ REUSED MATH (not duplicated)
 ============================
 The OOD math (``rolling_spread``, ``calibrate_threshold``) is imported from
 ``phm_core.calibration`` (this repo, src/phm_core/phm_core/calibration.py),
-which itself ports it byte-faithfully from phantom-braking. We add that package
+which itself ports it byte-faithfully from supercombo-blindspot. We add that package
 dir to ``sys.path`` and import it; we do NOT re-implement the math here.
 
   phm_core.calibration.rolling_spread       <- e6_detector.py:16-23
   phm_core.calibration.calibrate_threshold  <- e6_detector.py:26-31
 
 The alpha-sweep + calibrate-on-clean + fires-at-alpha methodology mirrors
-phantom-braking src/e6_detector.py:69-84 (``evaluate_on_e4``), where the
+supercombo-blindspot src/e6_detector.py:69-84 (``evaluate_on_e4``), where the
 detector's per-alpha fired-fraction is read off an input-perturbation sweep.
 """
 
@@ -225,7 +225,7 @@ def run_sweep(
 
     OOD score per alpha: we treat the batch of hidden vectors as a sequence
     (T = n_eval frames, D = hidden_dim) and compute ``rolling_spread`` over it,
-    exactly as phantom-braking treats a drive's hidden_state sequence
+    exactly as supercombo-blindspot treats a drive's hidden_state sequence
     (e6_detector.py:69-84). The OOD SCORE plotted is the mean rolling spread.
     The FIRED FRACTION is the fraction of windows whose spread is BELOW the
     threshold (collapse = low spread), matching ``evaluate_on_e4``
@@ -233,7 +233,7 @@ def run_sweep(
 
     The threshold is calibrated on the alpha=0 (clean) hidden features via
     ``calibrate_threshold`` at the given percentile (1st percentile, identical to
-    phantom-braking e6_detector.py:26-31).
+    supercombo-blindspot e6_detector.py:26-31).
 
     Two distinct, intentionally different decision levels:
       - the MONITOR fires when the frame-flag fraction first exceeds

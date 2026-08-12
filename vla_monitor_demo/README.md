@@ -4,7 +4,7 @@ This demo shows the Policy Health Monitor (PHM) internal-feature OOD monitor
 crossing its calibrated threshold at a LOWER input-perturbation strength than the
 policy's OUTPUT collapses, that is, the monitor gives positive early-warning
 lead-time under input distribution shift. The methodology mirrors the
-phantom-braking alpha sweep.
+supercombo-blindspot alpha sweep.
 
 ## What it shows
 
@@ -17,7 +17,7 @@ alpha, over a batch, we measure two things:
   hidden-layer features, the "policy embedding."
 
 The OOD threshold is calibrated on the alpha=0 (clean) hidden features via
-`calibrate_threshold` at the 1st percentile, identical to phantom-braking.
+`calibrate_threshold` at the 1st percentile, identical to supercombo-blindspot.
 
 The headline question: does the monitor cross its threshold at a lower alpha than
 the output crosses a degradation level? A positive alpha gap is early warning.
@@ -99,7 +99,7 @@ The demo requires Python, PyTorch, NumPy, and optionally Matplotlib. When
 Matplotlib is available, `alpha_sweep.png` is rendered; the raw sweep is always
 written to `alpha_sweep.csv`.
 
-## Reused math and phantom-braking citation
+## Reused math and supercombo-blindspot citation
 
 The OOD math is NOT duplicated here. The harness inserts
 `src/phm_core` onto `sys.path` and imports:
@@ -108,21 +108,21 @@ The OOD math is NOT duplicated here. The harness inserts
 - `phm_core.calibration.calibrate_threshold`
 
 `phm_core/phm_core/calibration.py` ports those byte-faithfully from
-the public Phantom-Braking `src/e6_detector.py` implementation.
+the public supercombo-blindspot `src/e6_detector.py` implementation.
 
-Phantom-braking citation (read-only, not modified):
+supercombo-blindspot citation (read-only, not modified):
 
 - the alpha-sweep detector methodology this demo mirrors is
-  `phantom-braking/src/e6_detector.py:69-84` (`evaluate_on_e4`): for each alpha,
+  `supercombo-blindspot/src/e6_detector.py:69-84` (`evaluate_on_e4`): for each alpha,
   compute the fraction of frames whose rolling spread sits below a threshold
   calibrated on real in-distribution data, and report the alpha where the
   detector fires.
 - the collapse intuition (the model's recurrent feature vector freezes to a
   point under shift, so windowed variance drops) is
-  `phantom-braking/src/e6_detector.py:1-7`.
+  `supercombo-blindspot/src/e6_detector.py:1-7`.
 - the threshold rule (below this spread = OOD, 1st percentile of the
   in-distribution spread distribution) is
-  `phantom-braking/src/e6_detector.py:26-31`.
+  `supercombo-blindspot/src/e6_detector.py:26-31`.
 
 ## Files
 

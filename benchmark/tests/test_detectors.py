@@ -52,7 +52,7 @@ def test_knn_unnormalized_detects_shift():
 
 
 def test_knn_normalized_loses_magnitude_shift():
-    # L2-normalized KNN (Sun et al. 2022 default, the phantom-braking default)
+    # L2-normalized KNN (Sun et al. 2022 default, the supercombo-blindspot default)
     # projects onto the unit sphere and discards the radial magnitude that the
     # shift lives in, so it is at-or-below chance on a pure magnitude shift.
     # This is a documented property, not a harness bug: it is why the benchmark

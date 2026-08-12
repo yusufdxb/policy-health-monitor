@@ -219,7 +219,7 @@ def write_md(out: Path, reports: dict[str, dict]) -> None:
         "convention before scoring (`lib/phm_detector.py`)."
     )
     lines.append("")
-    lines.append("Baselines ported from phantom-braking (`benchmark/lib/baselines.py`, "
+    lines.append("Baselines ported from supercombo-blindspot (`benchmark/lib/baselines.py`, "
                  "citing `src/baselines.py`): Mahalanobis (Lee et al. 2018), "
                  "Relative Mahalanobis (Ren et al. 2021), KNN k=50 (Sun et al. "
                  "2022). RND (Burda et al. 2019) is added as the 4th method, "
@@ -235,7 +235,7 @@ def write_md(out: Path, reports: dict[str, dict]) -> None:
     lines.append("| ViM | No | Requires a classifier weight matrix + logits; neither exists for an embedding stream. |")
     lines.append("")
     lines.append("These three are N/A here for the same structural reason as in "
-                 "phantom-braking (`src/baselines.py:60-107`): there are no "
+                 "supercombo-blindspot (`src/baselines.py:60-107`): there are no "
                  "classifier logits, only an internal feature vector.")
     lines.append("")
     lines.append("Metrics are threshold-free (AUROC, AUPR, FPR@95TPR) with "
@@ -291,7 +291,7 @@ def write_md(out: Path, reports: dict[str, dict]) -> None:
                  "no mean shift they are at-or-below chance; on a shift they are "
                  "strong. The two scenarios make this contrast explicit.")
     lines.append("- L2-normalized KNN (Sun et al. 2022 default, the "
-                 "phantom-braking default) projects onto the unit sphere and "
+                 "supercombo-blindspot default) projects onto the unit sphere and "
                  "discards the radial magnitude. It is at-or-below chance on "
                  "BOTH scenarios here because the synthetic shift lives in "
                  "magnitude; the unnormalized variant recovers it. Both are "

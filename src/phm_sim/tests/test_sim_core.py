@@ -126,7 +126,7 @@ class TestRollingSpreadInvariant:
         """A threshold calibrated on in-dist data must classify OOD frames as violating.
 
         Uses phm_core.calibration.calibrate_threshold (ported from
-        Phantom-Braking e6_detector.py:26-31).
+        supercombo-blindspot e6_detector.py:26-31).
 
         Expectations:
         - >= 90% of in-dist frames are above the threshold (low FPR).
@@ -138,7 +138,7 @@ class TestRollingSpreadInvariant:
         in_spreads = self._spreads(in_d)
         ood_spreads = self._spreads(ood)
 
-        # Calibrate on in-distribution data, 1st percentile (same as Phantom E6).
+        # Calibrate on in-distribution data, 1st percentile (same as supercombo-blindspot E6).
         thr = calibrate_threshold(in_spreads, percentile=1.0)
 
         # Low FPR: most in-dist frames should be above threshold (healthy).
