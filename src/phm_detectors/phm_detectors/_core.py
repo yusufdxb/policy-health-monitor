@@ -453,7 +453,7 @@ class DeadTopicAdapter(Detector):
 class RecurrentTemporalSpreadAdapter(Detector):
     """Fires when a policy's recurrent feature freezes (rolling spread collapses).
 
-    Origin: this is the E6 self-aware OOD monitor from Phantom-Braking
+    Origin: this is the E6 self-aware OOD monitor from supercombo-blindspot
     (``supercombo-blindspot``, github.com/yusufdxb/supercombo-blindspot),
     ``src/e6_detector.py:16-31`` (``rolling_spread`` + ``calibrate_threshold``).
     There it showed that openpilot's supercombo driving model freezes its 512-D
@@ -491,7 +491,7 @@ class RecurrentTemporalSpreadAdapter(Detector):
         target_topic: the embedding topic this adapter watches (used as
             ``Detector.target_topic``; the node routes by topic).
         window: number of consecutive frames in the rolling covariance. Must be
-            >= 2. Default 30, matching the Phantom-Braking E6 window.
+            >= 2. Default 30, matching the supercombo-blindspot E6 window.
         threshold: calibrated spread below which the detector fires. Default 0.0
             (uncalibrated); set via the constructor or
             :meth:`calibrate_from_data` before deployment.
@@ -542,7 +542,7 @@ class RecurrentTemporalSpreadAdapter(Detector):
     ) -> float:
         """Learn and store the threshold from in-distribution embeddings.
 
-        Delegates to ``phm_core.calibration`` (Phantom-Braking E6): computes the
+        Delegates to ``phm_core.calibration`` (supercombo-blindspot E6): computes the
         rolling spread of ``in_dist_hidden`` and takes its ``percentile``-th
         percentile, so ~99% of real frames stay above the threshold at the
         default 1st percentile.
@@ -604,7 +604,7 @@ class RecurrentTemporalSpreadAdapter(Detector):
         spread = float(rolling_spread(hidden, self._window)[-1])
         self._last_spread = spread
 
-        # Low spread = OOD (Phantom-Braking E6: spread < threshold -> firing).
+        # Low spread = OOD (supercombo-blindspot E6: spread < threshold -> firing).
         raw_violating = spread < self._threshold
         post_hyst = self._hysteresis.observe(raw_violating)
 

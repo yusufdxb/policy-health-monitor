@@ -99,7 +99,7 @@ def test_ood_score_collapses_with_alpha(result):
     """The mean rolling spread of the embedding falls as the input shifts.
 
     Lower spread = the hidden state collapsing toward saturation, the same
-    collapse direction phantom-braking detects (e6_detector.py:1-7).
+    collapse direction supercombo-blindspot detects (e6_detector.py:1-7).
     """
     ood = result.ood_score
     assert ood[-1] < ood[0], "mean rolling spread did not fall under shift"

@@ -8,13 +8,13 @@ module directly without spinning a ROS graph.
 
 OOD signal: low rolling spread = out of distribution.
 The policy's hidden state collapses toward a single point when the policy
-encounters OOD conditions (first documented in Phantom-Braking
+encounters OOD conditions (first documented in supercombo-blindspot
 ``src/e6_detector.py`` for openpilot supercombo). A monitor watching the
 trace of the rolling covariance (sum of per-dimension variances) fires when
 the spread drops below a calibrated threshold.
 
 Threshold direction: spread < threshold -> OOD (violating). This mirrors
-Phantom-Braking e6_detector.py:calibrate_threshold, where the threshold is the
+supercombo-blindspot e6_detector.py:calibrate_threshold, where the threshold is the
 ``percentile``-th percentile of the real-driving distribution, so in-distribution
 drives stay ABOVE it with high probability.
 """

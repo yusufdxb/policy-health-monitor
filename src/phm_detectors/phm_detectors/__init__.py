@@ -6,7 +6,7 @@ Four adapters (pure Python, no rclpy):
 - ``StaticThresholdAdapter``         -- metric above static limit
 - ``DeadTopicAdapter``               -- topic silent for > timeout_sec
 - ``RecurrentTemporalSpreadAdapter`` -- policy recurrent feature freezes
-  (rolling temporal spread collapses), ported from Phantom-Braking E6
+  (rolling temporal spread collapses), ported from supercombo-blindspot E6
 
 The rclpy node (``phm_detectors_node``) runs these adapters off the live ROS
 graph and publishes ``phm_msgs/DetectorVerdict`` to ``/phm/verdicts``.

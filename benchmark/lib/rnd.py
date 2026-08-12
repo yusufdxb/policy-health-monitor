@@ -8,7 +8,7 @@ out-of-distribution data, so the squared error is an OOD novelty score with the
 standard convention HIGHER = more OOD.
 
 This is the 4th method required by the benchmark spec, alongside the three
-phantom-braking baselines (mahalanobis / relative_mahalanobis / knn).
+supercombo-blindspot baselines (mahalanobis / relative_mahalanobis / knn).
 
 Two backends, same math, same higher-is-OOD output:
 

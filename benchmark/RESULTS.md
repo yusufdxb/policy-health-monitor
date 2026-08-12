@@ -2,7 +2,7 @@
 
 Detector under test: the PHM internal-feature OOD score (`phm_core.calibration.rolling_spread` + `calibrate_threshold`), the windowed trace of the policy hidden-state covariance. Lower spread = more OOD; the harness negates it to the common higher-is-OOD convention before scoring (`lib/phm_detector.py`).
 
-Baselines ported from phantom-braking (`benchmark/lib/baselines.py`, citing `src/baselines.py`): Mahalanobis (Lee et al. 2018), Relative Mahalanobis (Ren et al. 2021), KNN k=50 (Sun et al. 2022). RND (Burda et al. 2019) is added as the 4th method, both a closed-form numpy form and a gradient-trained torch form run out-of-process on `/usr/bin/python3`.
+Baselines ported from supercombo-blindspot (`benchmark/lib/baselines.py`, citing `src/baselines.py`): Mahalanobis (Lee et al. 2018), Relative Mahalanobis (Ren et al. 2021), KNN k=50 (Sun et al. 2022). RND (Burda et al. 2019) is added as the 4th method, both a closed-form numpy form and a gradient-trained torch form run out-of-process on `/usr/bin/python3`.
 
 ## Not-applicable baselines (regression / embedding setting)
 
@@ -12,7 +12,7 @@ Baselines ported from phantom-braking (`benchmark/lib/baselines.py`, citing `src
 | Energy | No | No logits to logsumexp; there is no classifier head on the embedding. |
 | ViM | No | Requires a classifier weight matrix + logits; neither exists for an embedding stream. |
 
-These three are N/A here for the same structural reason as in phantom-braking (`src/baselines.py:60-107`): there are no classifier logits, only an internal feature vector.
+These three are N/A here for the same structural reason as in supercombo-blindspot (`src/baselines.py:60-107`): there are no classifier logits, only an internal feature vector.
 
 Metrics are threshold-free (AUROC, AUPR, FPR@95TPR) with stratified-bootstrap 95% CIs (1000 resamples). Latency is the median per-frame wall-clock cost (fit + score over the full stream, divided by frame count) over 30 repeats. AUROC, AUPR, and FPR@95 are pure-numpy re-implementations of the sklearn definitions (the venv has no sklearn), unit-tested against a hand-computed fixture.
 
@@ -54,7 +54,7 @@ The two scenarios separate the two failure families. On the **collapse** scenari
 
 - The PHM rolling-spread detector targets the collapse / frozen-embedding failure (second-order: variance drops). It is location-invariant by construction (watches the trace of the windowed covariance, not absolute position).
 - Mahalanobis / RMD / KNN target location shift (first-order: the embedding moves to a new region). On a pure collapse with no mean shift they are at-or-below chance; on a shift they are strong. The two scenarios make this contrast explicit.
-- L2-normalized KNN (Sun et al. 2022 default, the phantom-braking default) projects onto the unit sphere and discards the radial magnitude. It is at-or-below chance on BOTH scenarios here because the synthetic shift lives in magnitude; the unnormalized variant recovers it. Both are reported so this is visible rather than buried.
+- L2-normalized KNN (Sun et al. 2022 default, the supercombo-blindspot default) projects onto the unit sphere and discards the radial magnitude. It is at-or-below chance on BOTH scenarios here because the synthetic shift lives in magnitude; the unnormalized variant recovers it. Both are reported so this is visible rather than buried.
 - RND captures the shift (both numpy closed-form ridge predictor and torch gradient-trained MLP predictor agree, AUROC 1.000) but NOT the collapse, for the same in-cloud-anchor reason as the distance baselines: the predictor reproduces the target well on the in-distribution anchor.
 - Latency: the numpy detectors are 1.5 to 13 us/frame (amortised fit+score over the stream). The torch RND is ~2400 us/frame because it pays per-call Python process spawn + CUDA context init + 300 Adam epochs each invocation; it is reported for correctness corroboration, not as a latency contender.
 
