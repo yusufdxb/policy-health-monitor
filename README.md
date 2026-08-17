@@ -152,6 +152,17 @@ ros2 lifecycle set /phm_ood_cpp activate
 Embedding frames that arrive while the node is not ACTIVE are dropped, and deactivating
 clears the rolling window so a re-activation never blends pre- and post-activation state.
 
+### Non-finite inputs fail closed
+
+A window whose rolling spread is NaN or Inf never reports healthy. Because `NaN < threshold`
+evaluates false, a naive threshold comparison fails *open* on exactly the input a broken
+upstream policy emits. Both the Python and the C++ detector cores test the spread for
+finiteness first and return a verdict scored at the intervene boundary with the reason
+`non-finite spread: embedding contains NaN or Inf`. The verdict is marked non-violating,
+since a non-finite embedding is a detector-health fault rather than evidence of OOD, and it
+is cached so the frequency gate carries the degraded state forward instead of replaying the
+last good verdict. Both cores are covered by tests.
+
 ## Development
 
 ```bash
