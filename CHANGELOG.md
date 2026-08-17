@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semantic versioning.
 
+## [Unreleased]
+
+### Fixed
+- Treat non-finite rolling spread as a detector-health fault in both Python and C++.
+- Align the C++ embedding subscriber with the Python best-effort QoS contract.
+- Warn when a non-positive threshold leaves either OOD node inert.
+
+### Changed
+- Publish reproducible native-runtime evidence and add a CI guard against publishing
+  machine-local paths or private hardware identifiers.
+
 ## [0.1.0] - 2026-06-06
 
 First public release.
@@ -22,5 +33,5 @@ First public release.
   `phm_detectors`, `phm_ood`, `phm_arbiter`, `phm_recovery`, `phm_ood_cpp`, `phm_sim`),
   a threshold-free reliability benchmark vs Mahalanobis / RMD / KNN / RND, and a C++
   `rclcpp` runtime node (plain / Eigen / LibTorch backends).
-- On-device validation on a Jetson Orin (real-policy embeddings, on-device latency / FPR,
-  induced-failure hardware demo) remains pending a compute target.
+- Target-platform validation with real-policy embeddings, on-device latency, false-positive
+  rate, and an induced-failure hardware demo remains pending.

@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -122,6 +123,92 @@ TEST(OodCoreTest, InDistributionIsHealthy)
   EXPECT_FALSE(v.violating);
   EXPECT_NEAR(v.score, 0.0, 1e-12);
   EXPECT_EQ(v.suggested_action, phm_ood_cpp::ACTION_NONE);
+}
+
+// reset() drops the rolling window, the hysteresis run, and the pinned
+// dimension, so a re-activated node warms up again instead of blending a stale
+// context into the new one. Config (window/threshold) is preserved.
+TEST(OodCoreTest, ResetClearsRollingState)
+{
+  OodCore core(3, /*threshold=*/0.5, /*min_consecutive=*/1,
+               /*compute_every=*/1, make_plain_backend());
+  const std::vector<float> e{1.0f, 2.0f};
+  core.update(e, "p");
+  core.update(e, "p");
+  const auto full = core.update(e, "p");  // buffer full -> real verdict
+  EXPECT_TRUE(full.violating);
+
+  // Without a reset, changing the embedding dimension is a hard error.
+  EXPECT_THROW(core.update(std::vector<float>{1.0f, 2.0f, 3.0f}, "p"), std::invalid_argument);
+
+  core.reset();
+  EXPECT_EQ(core.window(), static_cast<std::size_t>(3));  // config preserved
+
+  // Post-reset the buffer is empty again, so the next frame must warm up, and
+  // the pinned dimension is cleared so a new dimension is accepted.
+  const auto after = core.update(std::vector<float>{1.0f, 2.0f, 3.0f}, "p");
+  EXPECT_FALSE(after.violating);
+  EXPECT_NE(after.reason.find("warming up: 1/3"), std::string::npos);
+}
+
+// A window containing NaN/Inf must not come back healthy.
+//
+// Regression: the threshold test is `spread < threshold_`, and every
+// comparison against NaN is false, so a corrupt embedding previously produced
+// a normal healthy verdict with score 0.0. That is a fail-OPEN in a safety
+// monitor, on exactly the input class a broken upstream policy emits.
+// Mirrors test_ood_core.py::test_non_finite_embedding_does_not_report_healthy.
+TEST(NonFiniteInput, DoesNotReportHealthy)
+{
+  for (float bad : {std::numeric_limits<float>::quiet_NaN(),
+      std::numeric_limits<float>::infinity(),
+      -std::numeric_limits<float>::infinity()})
+  {
+    OodCore core(3, /*threshold=*/0.5, /*min_consecutive=*/1,
+      /*compute_every=*/1, make_plain_backend());
+    core.update(std::vector<float>{1.0f, 2.0f, 3.0f}, "p");
+    core.update(std::vector<float>{4.0f, 0.0f, 1.0f}, "p");
+    const auto v = core.update(std::vector<float>{bad, 1.0f, 2.0f}, "p");
+
+    EXPECT_DOUBLE_EQ(v.score, phm_ood_cpp::BAD_INPUT_SCORE);
+    EXPECT_FALSE(v.violating);
+    EXPECT_EQ(v.suggested_action, phm_ood_cpp::ACTION_NONE);
+    EXPECT_NE(v.reason.find("non-finite"), std::string::npos);
+  }
+}
+
+// Once a corrupt window is computed the degraded verdict must stick, including
+// across frames skipped by the frequency gate. Without caching, a corrupt
+// stream would alternate between degraded and a stale healthy verdict.
+TEST(NonFiniteInput, PersistsThroughFrequencyGate)
+{
+  OodCore core(3, /*threshold=*/0.5, /*min_consecutive=*/1,
+    /*compute_every=*/2, make_plain_backend());
+  for (int i = 0; i < 6; ++i) {
+    core.update(std::vector<float>{1.0f * i, 2.0f, 3.0f}, "p");
+  }
+  const std::vector<float> bad{std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f};
+
+  bool seen_degraded = false;
+  for (int i = 0; i < 6; ++i) {
+    const auto v = core.update(bad, "p");
+    const bool degraded = v.reason.find("non-finite") != std::string::npos;
+    if (degraded) {seen_degraded = true;}
+    // Never revert to healthy once the fault has been observed.
+    if (seen_degraded) {EXPECT_TRUE(degraded);}
+  }
+  EXPECT_TRUE(seen_degraded);
+}
+
+// The guard must not perturb any verdict on well-formed input.
+TEST(NonFiniteInput, FiniteInputUnaffected)
+{
+  OodCore core(2, /*threshold=*/0.001, /*min_consecutive=*/1,
+    /*compute_every=*/1, make_plain_backend());
+  core.update(std::vector<float>{0.0f, 0.0f}, "p");
+  const auto v = core.update(std::vector<float>{2.0f, 4.0f}, "p");
+  EXPECT_EQ(v.reason.find("non-finite"), std::string::npos);
+  EXPECT_NE(v.score, phm_ood_cpp::BAD_INPUT_SCORE);
 }
 
 int main(int argc, char ** argv)

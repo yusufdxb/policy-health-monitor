@@ -2,6 +2,7 @@
 // ROS-free OOD core. See ood_core.hpp for the Python source mapping.
 #include "phm_ood_cpp/ood_core.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <stdexcept>
 #include <utility>
@@ -52,6 +53,18 @@ OodCore::OodCore(
   }
   backend_name_ = backend_->name();
   buffer_.reserve(window_);
+}
+
+void OodCore::reset()
+{
+  buffer_.clear();
+  buffer_.reserve(window_);
+  dim_ = 0;
+  frame_count_ = 0;
+  last_spread_ = 0.0;
+  have_last_ = false;
+  last_verdict_ = VerdictData{};
+  hysteresis_.reset();
 }
 
 VerdictData OodCore::ok_verdict(const std::string & reason) const
@@ -110,6 +123,31 @@ VerdictData OodCore::update(
   }
   const double spread = backend_->rolling_spread(flat, window_, dim_);
   last_spread_ = spread;
+
+  // Fail closed on a non-finite spread (_core.py: same guard).
+  //
+  // `NaN < threshold_` is false, so without this the detector reports a
+  // *healthy* verdict for a window containing NaN or Inf: it fails open on
+  // precisely the input class a broken upstream policy emits. A single
+  // non-finite element propagates through the column variance and the sum in
+  // every backend, so testing the spread catches it for zero per-element cost.
+  //
+  // The verdict mirrors the dim-mismatch case above: score at the intervene
+  // boundary, not violating (this is a detector-health fault, not evidence of
+  // OOD), and no suggested action. It is cached so the frequency gate carries
+  // the degraded state through non-compute frames rather than replaying the
+  // last good verdict.
+  if (!std::isfinite(spread)) {
+    VerdictData bad;
+    bad.source = SOURCE;
+    bad.score = BAD_INPUT_SCORE;
+    bad.violating = false;
+    bad.reason = "non-finite spread: embedding contains NaN or Inf";
+    bad.suggested_action = ACTION_NONE;
+    last_verdict_ = bad;
+    have_last_ = true;
+    return bad;
+  }
 
   const bool raw_violating = spread < threshold_;
   const bool fired = hysteresis_.observe(raw_violating);

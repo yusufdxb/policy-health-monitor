@@ -13,8 +13,6 @@
   <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
-
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
   <depend>rcl_interfaces</depend>
@@ -22,7 +20,7 @@
   <!-- phm_msgs provides PolicyHealthStatus (the subscription topic). -->
   <depend>phm_msgs</depend>
 
-  <test_depend>pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

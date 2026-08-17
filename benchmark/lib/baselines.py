@@ -1,7 +1,7 @@
 """Canonical post-hoc feature-space OOD baselines.
 
-Ported (re-implemented, not cross-imported) from
-``/home/yusuf/Projects/supercombo-blindspot/src/baselines.py``:
+Reimplemented, rather than cross-imported, from the public supercombo-blindspot
+``src/baselines.py`` module:
 
 - ``_fit_gaussian``                  <- baselines.py:112-131
 - ``mahalanobis``                    <- baselines.py:134-145

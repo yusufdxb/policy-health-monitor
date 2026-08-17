@@ -27,6 +27,12 @@ constexpr double DEGRADED_THRESHOLD = 0.25;
 constexpr double INTERVENE_THRESHOLD = 0.50;
 constexpr double STOP_THRESHOLD = 0.80;
 
+// Score reported when the detector cannot produce a meaningful verdict because
+// its input was malformed (dim mismatch, non-finite embedding). Mirrors the
+// literal 0.5 used by the dim-mismatch verdict in _core.py. Named here so the
+// two bad-input paths in either language cannot drift apart silently.
+constexpr double BAD_INPUT_SCORE = 0.5;
+
 // Linear map of a raw signal onto [0,1], clamped. Mirrors severity.py:63-89.
 // Pass healthy > worst when a LOW raw value is the unhealthy one (the
 // rolling-spread collapse case: healthy = threshold, worst = 0).

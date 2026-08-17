@@ -32,6 +32,7 @@ from phm_core.detector import (
 )
 from phm_core.hysteresis import Hysteresis
 from phm_core.severity import (
+    BAD_INPUT_SCORE,
     DEGRADED_THRESHOLD,
     INTERVENE_THRESHOLD,
     STOP_THRESHOLD,
@@ -167,7 +168,7 @@ class OodCore:
             # Return a degraded verdict with a clear reason; don't crash.
             return DetectorVerdictData(
                 source=SOURCE,
-                score=0.5,
+                score=BAD_INPUT_SCORE,
                 violating=False,
                 reason=(
                     f"dim mismatch: expected {self._embed_dim},"
@@ -201,6 +202,30 @@ class OodCore:
         # Only the last element is valid (window == window), rest are NaN.
         spread = float(spread_series[-1])
         self._last_spread = spread
+
+        # Fail closed on a non-finite spread (ood_core.cpp: same guard).
+        #
+        # ``NaN < threshold`` is False, so without this the detector reports a
+        # *healthy* verdict for a window containing NaN or Inf: it fails open on
+        # precisely the input class a broken upstream policy emits. A single
+        # non-finite element propagates through np.var().sum(), so testing the
+        # spread catches it without scanning every element.
+        #
+        # The verdict mirrors the dim-mismatch case above: score at the
+        # intervene boundary, not violating (this is a detector-health fault,
+        # not evidence of OOD), and no suggested action. It is cached so the
+        # frequency gate carries the degraded state through non-compute frames
+        # rather than replaying the last good verdict.
+        if not np.isfinite(spread):
+            verdict = DetectorVerdictData(
+                source=SOURCE,
+                score=BAD_INPUT_SCORE,
+                violating=False,
+                reason="non-finite spread: embedding contains NaN or Inf",
+                suggested_action=ACTION_NONE,
+            )
+            self._last_verdict = verdict
+            return verdict
 
         raw_violating = spread < self._threshold
         fired = self._hysteresis.observe(raw_violating)

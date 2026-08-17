@@ -2,7 +2,7 @@
 
 The detector under test is ``phm_core.calibration.rolling_spread`` +
 ``calibrate_threshold`` (the internal-feature OOD score). Source:
-``/home/yusuf/Projects/policy-health-monitor/src/phm_core/phm_core/calibration.py``
+``src/phm_core/phm_core/calibration.py``
 (itself ported from supercombo-blindspot e6_detector.py:16-31).
 
 PHM convention: LOWER rolling spread = more OOD (hidden-state collapse). The

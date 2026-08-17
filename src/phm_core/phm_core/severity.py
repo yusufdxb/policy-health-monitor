@@ -50,6 +50,11 @@ DEGRADED_THRESHOLD = 0.25
 INTERVENE_THRESHOLD = 0.50
 STOP_THRESHOLD = 0.80
 
+# Score reported when a detector cannot produce a meaningful verdict because its
+# input was malformed (dim mismatch, non-finite embedding). Named so the
+# bad-input paths in Python and in phm_ood_cpp/severity.hpp cannot drift apart.
+BAD_INPUT_SCORE = 0.5
+
 
 @dataclass(frozen=True)
 class Severity:

@@ -183,6 +183,20 @@ class OodNode(LifecycleNode):
                     " Falling back to 'threshold' parameter."
                 )
 
+        # A non-positive threshold makes the detector permanently inert: the OOD
+        # test is `spread < threshold`, and spread is a sum of variances, so it
+        # is never negative. The node would configure, activate, consume
+        # embeddings and publish healthy verdicts forever while monitoring
+        # nothing, which is indistinguishable from a working monitor. Say so
+        # unmistakably rather than letting the default value pass silently.
+        # Mirrors the same guard in phm_ood_cpp/src/ood_node.cpp.
+        if threshold <= 0.0:
+            self.get_logger().warn(
+                f"threshold={threshold:.6f} is non-positive: the detector is"
+                " INERT and will never flag OOD. Set the 'threshold' parameter"
+                " or 'calibration_file' from a calibration run."
+            )
+
         self._core = OodCore(
             window=window,
             threshold=threshold,

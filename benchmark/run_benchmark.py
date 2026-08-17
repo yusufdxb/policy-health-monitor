@@ -17,12 +17,8 @@ For each detector we report AUROC / AUPR / FPR@95TPR with bootstrap 95% CIs and
 per-frame latency (median microseconds). Results go to RESULTS.md and
 results.csv next to this file.
 
-Run with the benchmark venv:
-    env -i HOME=/home/yusuf \
-        PATH=/home/yusuf/Projects/policy-health-monitor/.venv/bin:/usr/bin:/bin \
-        PYTHONPATH=/home/yusuf/Projects/policy-health-monitor/src/phm_core:/home/yusuf/Projects/policy-health-monitor/benchmark \
-        /home/yusuf/Projects/policy-health-monitor/.venv/bin/python \
-        /home/yusuf/Projects/policy-health-monitor/benchmark/run_benchmark.py
+Run from the repository root with the project virtual environment:
+    .venv/bin/python benchmark/run_benchmark.py
 """
 
 from __future__ import annotations

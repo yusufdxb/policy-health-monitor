@@ -27,6 +27,7 @@ from phm_core.detector import (
     ACTION_NONE,
     ACTION_STOP_AND_HOLD,
 )
+from phm_core.severity import BAD_INPUT_SCORE
 
 from phm_ood._core import SOURCE, OodCore
 
@@ -452,3 +453,70 @@ def test_exactly_degraded_threshold_is_log_only():
     v = _verdict_at_score(0.25)
     assert v.violating is True
     assert v.suggested_action == ACTION_LOG_ONLY
+
+
+# ---------------------------------------------------------------------------
+# Non-finite embeddings must fail closed (regression)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_non_finite_embedding_does_not_report_healthy(bad):
+    """A window containing NaN/Inf must not produce a healthy verdict.
+
+    Regression: the threshold test is ``spread < threshold``, and any
+    comparison against NaN is False, so a corrupt embedding previously came
+    back as a normal healthy verdict with score 0.0. That is a fail-OPEN in a
+    safety monitor, on exactly the input class a broken upstream policy emits.
+    """
+    core = make_core()
+    for _ in range(WINDOW - 1):
+        core.update(IN_DIST_HIDDEN[0])
+
+    frame = IN_DIST_HIDDEN[1].copy()
+    frame[3] = bad
+    verdict = core.update(frame)
+
+    assert verdict.score == BAD_INPUT_SCORE
+    assert "non-finite" in verdict.reason
+    assert verdict.suggested_action == ACTION_NONE
+    # Not "violating": this is a detector-health fault, not evidence of OOD.
+    assert verdict.violating is False
+
+
+def test_non_finite_verdict_persists_through_the_frequency_gate():
+    """The degraded verdict must be cached, not replaced by the last good one.
+
+    With compute_every > 1, gated frames replay ``_last_verdict``. Two distinct
+    behaviours matter here:
+
+    * Detection is delayed by up to ``compute_every - 1`` frames, because a
+      gated frame is never computed. That is inherent to the frequency gate and
+      predates this guard.
+    * Once a corrupt window *is* computed, the degraded verdict must stick,
+      including across subsequent gated frames. If the non-finite path returned
+      without caching, the stream would alternate between "degraded" and a
+      stale "healthy" verdict.
+    """
+    core = make_core(compute_every=2, embed_dim=DIM)
+    for i in range(WINDOW * 2):
+        core.update(IN_DIST_HIDDEN[i])
+
+    bad_frame = IN_DIST_HIDDEN[0].copy()
+    bad_frame[0] = np.nan
+    seen = [core.update(bad_frame).reason for _ in range(6)]
+
+    degraded = ["non-finite" in r for r in seen]
+    assert any(degraded), seen
+    # Everything from the first computed corrupt frame onward stays degraded.
+    first = degraded.index(True)
+    assert first < 2, f"detection delayed more than the gate explains: {seen}"
+    assert all(degraded[first:]), seen
+
+
+def test_finite_embeddings_are_unaffected():
+    """The guard must not change any verdict on well-formed input."""
+    core = make_core()
+    for i in range(WINDOW * 3):
+        v = core.update(IN_DIST_HIDDEN[i])
+    assert "non-finite" not in v.reason
+    assert v.score != BAD_INPUT_SCORE
