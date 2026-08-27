@@ -89,7 +89,7 @@ PILOT_SIGMA_GRID = (0.5, 1.0, 1.5, 2.0, 2.5)
 PILOT_TARGET_FAILURE_RATE = 0.35
 PILOT_N = 20
 
-DETECTOR_ORDER = ["phm_rolling_spread", "hotelling_t2", "mahalanobis",
+DETECTOR_ORDER = ["phm_rolling_spread", "hotelling_t2", "hotelling_t2_masked", "mahalanobis",
                   "relative_mahalanobis", "knn", "pca_residual", "rnd", "temporal_rnd"]
 
 
@@ -257,11 +257,23 @@ def alarm_diagnostics(arm_eps, arm_scores, threshold: float) -> dict:
     }
 
 
+def _hotelling(fid, ft):
+    import baselines
+    return baselines.hotelling_t2_window(fid, ft, window=WINDOW)
+
+
 def build_score_fns():
     fns = dict(base.DETECTORS)
     fns["rnd"] = base.make_rnd_scorer(window=1)
     fns["temporal_rnd"] = base.make_rnd_scorer(window=8)
     fns["phm_rolling_spread"] = base.rolling_spread_score
+    # Exploratory variant, added after a pre-run shakedown showed that
+    # hotelling_t2_window's frame-0 score is the same saturated constant for
+    # every stream (a one-sample window has exactly zero variance), which pins
+    # its episode-max AUROC at exactly 0.500 by construction. Reported alongside
+    # the unmodified detector, never in place of it. See the deviations section
+    # of the results file.
+    fns["hotelling_t2_masked"] = lambda fid, ft: gi.mask_warmup(_hotelling(fid, ft), WINDOW)
     return fns
 
 
@@ -360,11 +372,17 @@ def main():
     assert seed_sets["nominal"].isdisjoint(seed_sets["high"])
     _log("seed-block disjointness calib / nominal-eval / induced: OK")
 
-    dose_audit = {k: gi.dose_match_report(arms[k]) for k in ("high", "dose")}
+    dose_audit = {k: gi.dose_match_report(arms[k], K_WINDOW) for k in ("high", "dose")}
+    dose_audit_full = {k: gi.dose_match_report(arms[k]) for k in ("high", "dose")}
     for k, r in dose_audit.items():
-        _log(f"dose audit {k}: failed mean dose {r['mean_dose_failed']:.3f} "
-             f"(n={r['n_failed']}), succeeded {r['mean_dose_succeeded']:.3f} "
-             f"(n={r['n_succeeded']}), rel_gap {r['rel_gap']:.3f}")
+        _log(f"dose audit {k} (first {K_WINDOW} frames, length-matched): failed mean "
+             f"dose {r['mean_dose_failed']:.3f} (n={r['n_failed']}), succeeded "
+             f"{r['mean_dose_succeeded']:.3f} (n={r['n_succeeded']}), rel_gap "
+             f"{r['rel_gap']:.3f}")
+        f = dose_audit_full[k]
+        _log(f"dose audit {k} (whole episode, duration-confounded): failed "
+             f"{f['mean_dose_failed']:.3f}, succeeded {f['mean_dose_succeeded']:.3f}, "
+             f"rel_gap {f['rel_gap']:.3f}")
 
     oracle = {k: gi.oracle_lead_times(arms[k]) for k in ("high", "dose")}
     for k, v in oracle.items():
@@ -420,6 +438,7 @@ def main():
         "high_sigma": args.high_sigma,
         "pilot_table": pilot_table,
         "dose_audit": dose_audit,
+        "dose_audit_full_episode": dose_audit_full,
         "oracle_lead": {k: {"mean": float(np.mean(v)) if v else None,
                             "median": float(np.median(v)) if v else None, "n": len(v)}
                         for k, v in oracle.items()},
@@ -480,14 +499,20 @@ def write_results_md(results: dict, meta: dict) -> None:
         f"exposure-confounded; `k={K}` is a max over the first {K} frames only, below "
         f"the shortest nominal episode, and is the number that carries a claim.\n"
     )
-    da = meta["dose_audit"]
+    da = meta["dose_audit"]["dose"]
+    daf = meta["dose_audit_full_episode"]["dose"]
     L.append(
-        "Dose audit. Within the dose-matched arm C2 the failed episodes received a mean "
-        f"injected sigma fraction of {da['dose']['mean_dose_failed']:.3f} "
-        f"(n={da['dose']['n_failed']}) and the succeeded ones "
-        f"{da['dose']['mean_dose_succeeded']:.3f} (n={da['dose']['n_succeeded']}), a "
-        f"relative gap of {da['dose']['rel_gap']:.3f}. The pre-registered blocker is a "
-        "relative gap above 0.10.\n"
+        f"Dose audit. Over the first {K} frames, which is the length-matched comparison, "
+        f"the failed episodes in the dose-matched arm C2 received a mean injected sigma "
+        f"fraction of {da['mean_dose_failed']:.3f} (n={da['n_failed']}) and the succeeded "
+        f"ones {da['mean_dose_succeeded']:.3f} (n={da['n_succeeded']}), a relative gap of "
+        f"{da['rel_gap']:.3f}. The pre-registered blocker is a relative gap above 0.10. "
+        f"Audited over the whole episode instead the gap is {daf['rel_gap']:.3f}, but that "
+        f"number is a duration artifact rather than a dose mismatch: a successful episode "
+        f"ends after roughly 40 frames while its ramp is still climbing, whereas a failed "
+        f"one runs to the horizon at full amplitude, so the whole-episode mean measures "
+        f"how long an episode lasted as much as how hard it was hit. The injection "
+        f"schedule itself is identical across the two groups by construction.\n"
     )
 
     L.append("## Contrast 1: the legacy shape, nominal-eval against a perturbed arm\n")
@@ -562,7 +587,8 @@ def write_results_md(results: dict, meta: dict) -> None:
             f"AUROC {_ci(prim)}. The pre-registered kill criterion fires when that CI "
             f"contains 0.5: **{'FIRED, the claim is dead' if dead else 'not fired'}**.\n"
         )
-    surv = [d for d in order
+    registered = [d for d in order if d != "hotelling_t2_masked"]
+    surv = [d for d in registered
             if results[d]["within_arm"]["dose"]["k"]["auroc"] is not None
             and results[d]["within_arm"]["dose"]["k"]["lo"] > 0.55]
     L.append(
@@ -600,6 +626,33 @@ def write_results_md(results: dict, meta: dict) -> None:
           f"**{'PASS' if ok else 'FAIL, every result above is withheld'}**.\n"
     )
 
+    L.append("\n## Deviations from the pre-registration\n")
+    L.append(
+        "Both were introduced during a pre-run shakedown at n=6 per arm, before any "
+        "evaluation-arm result was seen, and both are recorded here rather than folded "
+        "in silently.\n"
+    )
+    L.append(
+        f"1. The dose audit is computed over the first {K} frames as well as over the "
+        f"whole episode. The registration specified the whole-episode integral only, "
+        f"which the shakedown showed is confounded with episode duration in exactly the "
+        f"direction that would fake a dose mismatch.\n"
+    )
+    L.append(
+        f"2. A ninth detector, `hotelling_t2_masked`, is reported alongside the eight "
+        f"registered ones. `hotelling_t2_window` emits the same saturated constant at "
+        f"frame 0 for every stream regardless of content, because a one-sample window "
+        f"has exactly zero variance and the score is an absolute log-ratio against the "
+        f"ID variance. Under a max-over-frames episode statistic that constant is the "
+        f"episode score for every episode, which pins the detector at AUROC exactly "
+        f"0.500 and `frac_alarm_at_reset` exactly 1.00 by construction rather than by "
+        f"measurement. That is the explanation for the unresolved 0.500-against-0.982 "
+        f"discrepancy noted in `RESULTS_ROBOMIMIC.md`: it is an aggregation artifact, "
+        f"not a property of the policy or of either induction mechanism. The masked "
+        f"variant NaNs the first {WINDOW} frames, where the detector is undefined. The "
+        f"unmodified detector is still reported, and the masked variant is exploratory "
+        f"and excluded from the pre-registered eight-detector sweep in criterion 2.\n"
+    )
     RESULTS_PATH.write_text("\n".join(L) + "\n")
 
 

@@ -86,20 +86,47 @@ def episode_max(scores: np.ndarray, k: int | None = None) -> float:
     return float(np.max(s))
 
 
-def dose_integral(sigma_trace) -> float:
+def mask_warmup(scores: np.ndarray, n: int) -> np.ndarray:
+    """NaN out the first ``n`` frames of a score stream.
+
+    Some windowed detectors emit a degenerate score while their trailing window
+    is still filling. ``hotelling_t2_window`` is the concrete case: at frame 0
+    the window holds one sample, its within-window variance is exactly 0, and
+    the absolute log-ratio against the ID variance saturates at the same large
+    constant for EVERY stream regardless of content. Under a max-over-frames
+    episode statistic that constant is the episode score for every episode, so
+    the detector returns AUROC exactly 0.500 and frac_alarm_at_reset exactly
+    1.00 by construction rather than by measurement. Masking the warm-up frames
+    lets the detector be evaluated on the frames where it is actually defined.
+    """
+    s = np.asarray(scores, dtype=np.float64).copy()
+    s[: max(n, 0)] = np.nan
+    return s
+
+
+def dose_integral(sigma_trace, k: int | None = None) -> float:
     """Mean injected sigma fraction over an episode, i.e. the realized dose.
 
     Used to audit whether the failed and succeeded episodes inside one
     perturbation arm actually received comparable corruption. If they did not,
     a within-arm outcome contrast is measuring dose, not prediction.
+
+    ``k`` restricts the average to the first ``k`` frames. That restriction
+    matters: averaging over the whole episode conflates dose with duration,
+    because a successful episode ends after roughly 40 frames while its ramp is
+    still climbing, whereas a failed episode runs to the horizon at full
+    amplitude. The two groups then differ in mean dose even though the injection
+    schedule was identical. Auditing over a fixed prefix compares like with like.
     """
     tr = np.asarray(sigma_trace, dtype=np.float64)
+    if k is not None:
+        tr = tr[:k]
     if tr.size == 0:
         return 0.0
     return float(np.mean(tr))
 
 
-def dose_match_report(episodes) -> dict:
+def dose_match_report(episodes, k: int | None = None) -> dict:
     """Realized dose by outcome group for one perturbation arm.
 
     Returns per-group mean dose and episode counts plus ``rel_gap``, the relative
@@ -108,8 +135,8 @@ def dose_match_report(episodes) -> dict:
     dose-matched and its within-arm contrast cannot be read as a prediction
     result. ``rel_gap`` is NaN when either group is empty.
     """
-    failed = [dose_integral(e.get("sigma_trace", [])) for e in episodes if not e["success"]]
-    succ = [dose_integral(e.get("sigma_trace", [])) for e in episodes if e["success"]]
+    failed = [dose_integral(e.get("sigma_trace", []), k) for e in episodes if not e["success"]]
+    succ = [dose_integral(e.get("sigma_trace", []), k) for e in episodes if e["success"]]
     m_f = float(np.mean(failed)) if failed else float("nan")
     m_s = float(np.mean(succ)) if succ else float("nan")
     if not failed or not succ or max(abs(m_f), abs(m_s)) == 0.0:

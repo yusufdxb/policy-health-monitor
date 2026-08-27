@@ -12,6 +12,7 @@ from lib.gradual_induction import (
     dose_match_report,
     episode_max,
     inject_noise,
+    mask_warmup,
     oracle_lead_times,
     ramp_fraction,
 )
@@ -116,6 +117,24 @@ def test_dose_integral_is_the_mean_active_fraction():
     assert dose_integral([]) == 0.0
 
 
+def test_dose_integral_over_a_prefix_is_length_matched():
+    # Whole-episode dose conflates amplitude with duration: the long stream here
+    # spent most of its frames at full amplitude only because it ran longer.
+    short = [0.0, 0.5, 1.0]
+    long = [0.0, 0.5] + [1.0] * 98
+    assert dose_integral(long) > dose_integral(short)
+    assert dose_integral(long, k=3) == dose_integral(short, k=3)
+
+
+def test_dose_match_report_prefix_audit_clears_a_duration_artifact():
+    eps = [
+        {"success": False, "sigma_trace": np.array([0.0, 0.5] + [1.0] * 398)},
+        {"success": True, "sigma_trace": np.array([0.0, 0.5, 1.0])},
+    ]
+    assert dose_match_report(eps)["rel_gap"] > 0.10
+    assert dose_match_report(eps, k=3)["rel_gap"] == 0.0
+
+
 def test_dose_match_report_flags_a_mismatched_arm():
     eps = [
         {"success": False, "sigma_trace": np.ones(10)},
@@ -154,3 +173,37 @@ def test_oracle_lead_times_measure_terminal_minus_onset():
 def test_oracle_lead_times_skip_episodes_without_an_onset():
     eps = [{"success": False, "steps": 100, "onset_frame": None}]
     assert oracle_lead_times(eps) == []
+
+
+# --- the warm-up mask ------------------------------------------------------
+
+
+def test_mask_warmup_nans_the_leading_frames_and_leaves_the_rest():
+    s = mask_warmup(np.arange(5.0), 2)
+    assert np.isnan(s[:2]).all()
+    assert np.array_equal(s[2:], np.array([2.0, 3.0, 4.0]))
+
+
+def test_mask_warmup_does_not_mutate_its_input():
+    orig = np.arange(5.0)
+    mask_warmup(orig, 3)
+    assert np.array_equal(orig, np.arange(5.0))
+
+
+def test_mask_warmup_removes_the_hotelling_degenerate_first_frame():
+    # hotelling_t2_window emits the same saturated constant at frame 0 for every
+    # stream, because a one-sample window has exactly zero variance. Under an
+    # episode max that constant IS the episode score for every episode, which is
+    # why the detector returns AUROC exactly 0.500. Masked, the episode statistic
+    # reflects the frames where the detector is defined.
+    from lib import baselines
+
+    rng = np.random.default_rng(0)
+    fid = rng.normal(size=(500, 20))
+    healthy = rng.normal(size=(60, 20))
+    collapsed = np.tile(rng.normal(size=(1, 20)), (60, 1))
+    s_h = baselines.hotelling_t2_window(fid, healthy, window=20)
+    s_c = baselines.hotelling_t2_window(fid, collapsed, window=20)
+    assert s_h[0] == s_c[0]                      # identical regardless of content
+    assert episode_max(s_h) == episode_max(s_c)  # so the episode statistic ties
+    assert episode_max(mask_warmup(s_c, 20)) > episode_max(mask_warmup(s_h, 20))
