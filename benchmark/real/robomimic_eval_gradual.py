@@ -521,12 +521,19 @@ def write_results_md(results: dict, meta: dict) -> None:
         "failing episode looks different from a healthy one, which conflates "
         "'this episode is corrupted' with 'this episode is going to fail'.\n"
     )
-    L.append(f"| Detector | gradual C2, full | gradual C2, k={K} "
+    L.append(
+        "The C1 high-dose column is the contrast named in kill criterion 3 of the "
+        "registration. Read it with the floor effect in mind: C1 failed in 66 of 70 "
+        "episodes, so only 4 negatives back the whole column.\n"
+    )
+    L.append(f"| Detector | gradual C1, full | gradual C1, k={K} "
+             f"| gradual C2, full | gradual C2, k={K} "
              f"| cube D, full | cube D, k={K} |")
-    L.append("|---|---|---|---|---|")
+    L.append("|---|---|---|---|---|---|---|")
     for d in order:
         c = results[d]["cross_arm"]
-        L.append(f"| {d} | {_ci(c['dose']['full'])} | {_ci(c['dose']['k'])} "
+        L.append(f"| {d} | {_ci(c['high']['full'])} | {_ci(c['high']['k'])} "
+                 f"| {_ci(c['dose']['full'])} | {_ci(c['dose']['k'])} "
                  f"| {_ci(c['cube']['full'])} | {_ci(c['cube']['k'])} |")
 
     L.append("\n## Contrast 2 (primary): dose-matched, within one arm\n")
@@ -601,19 +608,34 @@ def write_results_md(results: dict, meta: dict) -> None:
            "These survive uncorrected and must be Holm-corrected across the eight "
            "detectors before being called significant.\n")
     )
-    conf = [d for d in order
-            if results[d]["cross_arm"]["dose"]["full"]["auroc"] is not None
-            and results[d]["cross_arm"]["dose"]["full"]["auroc"] >= 0.95
-            and results[d]["within_arm"]["dose"]["k"]["auroc"] is not None
-            and results[d]["within_arm"]["dose"]["k"]["lo"] <= 0.5
-            <= results[d]["within_arm"]["dose"]["k"]["hi"]]
+    def _confounded(arm: str) -> list[str]:
+        return [d for d in registered
+                if results[d]["cross_arm"][arm]["full"]["auroc"] is not None
+                and results[d]["cross_arm"][arm]["full"]["auroc"] >= 0.95
+                and results[d]["within_arm"]["dose"]["k"]["auroc"] is not None
+                and results[d]["within_arm"]["dose"]["k"]["lo"] <= 0.5
+                <= results[d]["within_arm"]["dose"]["k"]["hi"]]
+
+    conf = _confounded("high")
+    conf_dose = _confounded("dose")
     L.append(
-        f"3. Confound verdict. Detectors scoring AUROC at or above 0.95 on the legacy "
-        f"cross-arm contrast while their dose-matched CI contains 0.5: "
+        f"3. Confound verdict. The registered contrast is nominal-eval against the "
+        f"C1-failed episodes. Detectors scoring AUROC at or above 0.95 there while "
+        f"their C2 dose-matched k={K} CI contains 0.5: "
         f"{', '.join(conf) if conf else 'none'}. "
         + ("For these, the gradual mechanism's headline AUROC is a perturbation-presence "
            "confound, structurally the same error as the reset confound it was built to "
-           "remove.\n" if conf else "\n")
+           "remove. Every static feature-space detector in the registered set is in "
+           "this list; the two that are not, `phm_rolling_spread` and `hotelling_t2`, "
+           "are excluded because they never reached 0.95 on the cross-arm contrast in "
+           "the first place, not because they survived the dose-matched one.\n"
+           if conf else "\n")
+    )
+    L.append(
+        f"   Applying the same rule to the C2 cross-arm contrast instead of C1 narrows "
+        f"the list to {', '.join(conf_dose) if conf_dose else 'none'}, because the C2 "
+        f"arm's lower dose pulls most detectors below 0.95 on the cross-arm contrast "
+        f"too. The registered C1 wording above is the one that carries the verdict.\n"
     )
     pc = [(d, results[d]["cross_arm"]["cube"]["full"]) for d in ("mahalanobis", "knn")
           if d in results]
@@ -628,9 +650,14 @@ def write_results_md(results: dict, meta: dict) -> None:
 
     L.append("\n## Deviations from the pre-registration\n")
     L.append(
-        "Both were introduced during a pre-run shakedown at n=6 per arm, before any "
-        "evaluation-arm result was seen, and both are recorded here rather than folded "
-        "in silently.\n"
+        "Deviations 1 and 2 were introduced during a pre-run shakedown at n=6 per arm, "
+        "before any evaluation-arm result was seen. What is checkable from the "
+        "repository is the ordering: both are committed in the branch history at "
+        "commits dated before the timestamps on this run's cache and outputs, so "
+        "neither could have been written in response to the numbers below. The "
+        "shakedown itself left no artifact, so the n=6 detail rests on the author's "
+        "record rather than on evidence in the repository. Deviation 3 is an arm that "
+        "was registered and not run.\n"
     )
     L.append(
         f"1. The dose audit is computed over the first {K} frames as well as over the "
@@ -652,6 +679,41 @@ def write_results_md(results: dict, meta: dict) -> None:
         f"variant NaNs the first {WINDOW} frames, where the detector is undefined. The "
         f"unmodified detector is still reported, and the masked variant is exploratory "
         f"and excluded from the pre-registered eight-detector sweep in criterion 2.\n"
+    )
+    L.append(
+        "3. Arm F, the replication of the dose-matched arm at seed offset +100000, was "
+        "registered and has not been run. Every number in this file therefore comes "
+        "from a single seed block. The runner supports the arm "
+        "(`--seed-offset 100000 --dose-sigma "
+        f"{meta['dose_sigma']}`, which skips the pilot and reuses the selected dose), "
+        "so this is an unpaid cost rather than a design change. The primary result is a "
+        "null whose CI already spans chance, and a replication would tighten rather "
+        "than reverse it, but until arm F is run the null is single-block.\n"
+    )
+
+    L.append("\n## Reproducing this run\n")
+    L.append(
+        "The rollout cache under `benchmark/real/cache/` and the model-zoo checkpoint "
+        "under `benchmark/real/models/` are gitignored: they are large regenerable "
+        "binaries, not source. The full run, which collects every arm from scratch and "
+        "writes both this file and `benchmark/results_robomimic_gradual.json`, is\n"
+    )
+    L.append("```")
+    L.append("python benchmark/real/robomimic_eval_gradual.py")
+    L.append("```")
+    L.append(
+        f"with the defaults recorded in this run's metadata: seed offset "
+        f"{meta['seed_offset']}, {meta['arm_sizes']['calib']} calibration, "
+        f"{meta['arm_sizes']['nominal']} nominal-eval and "
+        f"{meta['arm_sizes']['high']} induced episodes per arm, high-dose sigma "
+        f"{meta['high_sigma']}, and the dose-matched sigma left to the pilot, which "
+        f"selected {meta['dose_sigma']}. Seed blocks are derived from the offset, so "
+        f"the episode set is fixed by that one number. Rollout collection is the "
+        f"expensive step; it writes "
+        f"`benchmark/real/cache/arms_gradual_seed{meta['seed_offset']}.npz`, after "
+        "which `--use-cache` reruns scoring and rewrites both artifacts in seconds. "
+        "Every detector is deterministic and the bootstrap is seeded, so a cached "
+        "rerun reproduces both artifacts byte for byte.\n"
     )
     RESULTS_PATH.write_text("\n".join(L) + "\n")
 
