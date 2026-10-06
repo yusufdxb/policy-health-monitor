@@ -8,6 +8,9 @@ Four adapters (pure Python, no rclpy):
 - ``RecurrentTemporalSpreadAdapter`` -- policy recurrent feature freezes
   (rolling temporal spread collapses), ported from supercombo-blindspot E6
 
+``SystemMetricsReader`` samples the host CPU, memory and GPU temperature that
+the ``StaticThresholdAdapter`` instances judge.
+
 The rclpy node (``phm_detectors_node``) runs these adapters off the live ROS
 graph and publishes ``phm_msgs/DetectorVerdict`` to ``/phm/verdicts``.
 """
@@ -22,6 +25,7 @@ from phm_detectors._core import (
     RecurrentSpreadSample,
     RecurrentTemporalSpreadAdapter,
     StaticThresholdAdapter,
+    SystemMetricsReader,
     ThresholdSample,
 )
 
@@ -33,5 +37,6 @@ __all__ = [
     "RecurrentSpreadSample",
     "RecurrentTemporalSpreadAdapter",
     "StaticThresholdAdapter",
+    "SystemMetricsReader",
     "ThresholdSample",
 ]

@@ -66,7 +66,8 @@ class ArbiterNode(Node):
 
         # ---------- State ----------
         # Latest verdict per source. Key = source string.
-        self._latest: dict[str, Any] = {}
+        # source -> (latest DetectorVerdict, monotonic receive time).
+        self._latest: dict[str, tuple[Any, float]] = {}
 
         # ---------- QoS ----------
         # All four policies declared explicitly on every PHM endpoint so intent
@@ -119,10 +120,12 @@ class ArbiterNode(Node):
 
     def _verdict_callback(self, msg: Any) -> None:  # msg: DetectorVerdict
         """Store the latest verdict per source (last-write-wins per source key)."""
-        # Attach a wall-clock receive timestamp so the arbiter can detect
-        # staleness even when the message header stamp is zero.
-        msg._recv_time = time.monotonic()
-        self._latest[msg.source] = msg
+        # Keep a monotonic receive time beside the message so the arbiter can
+        # detect staleness even when the header stamp is zero. It cannot be set
+        # as an attribute on the message: generated rclpy message classes use
+        # __slots__, so that assignment raised AttributeError on the first live
+        # verdict and killed the node.
+        self._latest[msg.source] = (msg, time.monotonic())
 
     def _timer_callback(self) -> None:
         """Run arbitration and publish the fused health status."""
@@ -130,7 +133,7 @@ class ArbiterNode(Node):
 
         # Build a list of lightweight wrappers so _core.arbitrate() sees plain
         # Python attributes (source, score, violating, reason, suggested_action,
-        # timestamp). We use _recv_time as the timestamp because the detectors
+        # timestamp). The receive time is the timestamp because the detectors
         # may not stamp their headers.
         class _MsgView:
             __slots__ = (
@@ -143,7 +146,7 @@ class ArbiterNode(Node):
             )
 
         views = []
-        for msg in self._latest.values():
+        for msg, recv_time in self._latest.values():
             v = _MsgView()
             v.source = msg.source
             # Trust-boundary sanitize (review decision 6): never forward a
@@ -162,7 +165,7 @@ class ArbiterNode(Node):
             v.violating = bool(msg.violating)
             v.reason = msg.reason
             v.suggested_action = int(msg.suggested_action)
-            v.timestamp = getattr(msg, "_recv_time", now)
+            v.timestamp = recv_time
             views.append(v)
 
         result: PolicyHealthStatusData = arbitrate(views, now, self._staleness_sec)

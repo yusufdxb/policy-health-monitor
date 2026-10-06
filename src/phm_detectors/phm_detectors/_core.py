@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from phm_core.calibration import calibrate_threshold, rolling_spread
@@ -232,6 +233,79 @@ class FrequencyDropAdapter(Detector):
             reason=reason,
             suggested_action=sev.suggested_action,
         )
+
+
+# ---------------------------------------------------------------------------
+# SystemMetricsReader
+# ---------------------------------------------------------------------------
+
+
+class SystemMetricsReader:
+    """Reads the host metrics the StaticThresholdAdapters judge, stdlib only.
+
+    ``cpu_percent`` is the busy share of all CPUs since the previous call
+    (``/proc/stat``), so the first call returns no CPU value. ``memory_percent``
+    is ``1 - MemAvailable / MemTotal`` (``/proc/meminfo``). ``gpu_temp_c`` is the
+    hottest thermal zone whose type names the GPU (``gpu-thermal`` on a Jetson);
+    hosts without one (a desktop with a discrete GPU) report no GPU value rather
+    than a made-up number. A metric that cannot be read is omitted.
+    """
+
+    def __init__(
+        self, proc_root: str = "/proc", thermal_root: str = "/sys/class/thermal"
+    ) -> None:
+        self._proc = Path(proc_root)
+        self._thermal = Path(thermal_root)
+        self._prev_cpu: tuple[int, int] | None = None
+
+    def read(self) -> dict[str, float]:
+        out: dict[str, float] = {}
+        cpu = self._cpu_percent()
+        if cpu is not None:
+            out["cpu_percent"] = cpu
+        mem = self._memory_percent()
+        if mem is not None:
+            out["memory_percent"] = mem
+        gpu = self._gpu_temp_c()
+        if gpu is not None:
+            out["gpu_temp_c"] = gpu
+        return out
+
+    def _cpu_percent(self) -> float | None:
+        try:
+            fields = (self._proc / "stat").read_text().splitlines()[0].split()
+        except (OSError, IndexError):
+            return None
+        ticks = [int(v) for v in fields[1:]]
+        idle = ticks[3] + (ticks[4] if len(ticks) > 4 else 0)  # idle + iowait
+        total = sum(ticks)
+        prev, self._prev_cpu = self._prev_cpu, (total, idle)
+        if prev is None or total <= prev[0]:
+            return None
+        busy = (total - prev[0]) - (idle - prev[1])
+        return 100.0 * busy / (total - prev[0])
+
+    def _memory_percent(self) -> float | None:
+        try:
+            info = dict(
+                line.split(":", 1) for line in (self._proc / "meminfo").read_text().splitlines()
+            )
+            total = float(info["MemTotal"].split()[0])
+            avail = float(info["MemAvailable"].split()[0])
+        except (OSError, KeyError, ValueError):
+            return None
+        return 100.0 * (1.0 - avail / total) if total > 0 else None
+
+    def _gpu_temp_c(self) -> float | None:
+        temps = []
+        for zone in sorted(self._thermal.glob("thermal_zone*")):
+            try:
+                if "gpu" not in (zone / "type").read_text().strip().lower():
+                    continue
+                temps.append(float((zone / "temp").read_text().strip()) / 1000.0)
+            except (OSError, ValueError):
+                continue
+        return max(temps) if temps else None
 
 
 # ---------------------------------------------------------------------------

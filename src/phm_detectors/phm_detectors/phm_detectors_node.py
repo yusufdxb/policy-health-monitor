@@ -46,6 +46,8 @@ from phm_detectors._core import (
     FrequencyDropAdapter,
     FrequencySample,
     StaticThresholdAdapter,
+    SystemMetricsReader,
+    ThresholdSample,
 )
 
 # phm_msgs is only available after colcon build; import guarded for pure-python
@@ -140,6 +142,7 @@ class PhmDetectorsNode(Node):
                 "system:gpu", "gpu_temp_c", thresh_min_consec
             ),
         }
+        self._metrics = SystemMetricsReader()
         self._thresh_limits: dict[str, float] = {
             "cpu_percent": cpu_lim,
             "memory_percent": mem_lim,
@@ -295,11 +298,16 @@ class PhmDetectorsNode(Node):
             try:
                 from rosidl_runtime_py.utilities import get_message
                 msg_type = get_message(type_names[0])
+                # raw=True: the liveness/frequency adapters only need arrival
+                # times, so skip deserialization. On a GO2 the watched set
+                # includes /lowstate at 500 Hz, which deserialized in Python
+                # cost most of a CPU core.
                 sub = self.create_subscription(
                     msg_type,
                     topic,
                     lambda msg, t=topic: self._on_msg(t, msg),
                     _WATCH_QOS,
+                    raw=True,
                 )
                 self._watch_subs[topic] = sub
                 self.get_logger().info(
@@ -341,7 +349,7 @@ class PhmDetectorsNode(Node):
             self._msg_counts[topic] += 1
 
     def _tick(self) -> None:
-        """1 Hz timer: drive dead-topic adapters and emit verdicts."""
+        """1 Hz timer: drive dead-topic, host-metric and frequency adapters."""
         now = self._now()
 
         # Dead-topic verdicts.
@@ -349,6 +357,15 @@ class PhmDetectorsNode(Node):
             last_seen = self._last_seen.get(topic, now)
             sample = DeadTopicSample(topic=topic, last_seen_sec=last_seen, now_sec=now)
             verdict = adapter.update(sample)
+            if verdict is not None:
+                self._publish(verdict)
+
+        # Host-metric verdicts (CPU, memory, GPU temperature). A metric the host
+        # cannot report (no GPU thermal zone, first CPU sample) emits nothing.
+        for metric, value in self._metrics.read().items():
+            verdict = self._thresh_adapters[metric].update(
+                ThresholdSample(metric, value, self._thresh_limits[metric])
+            )
             if verdict is not None:
                 self._publish(verdict)
 

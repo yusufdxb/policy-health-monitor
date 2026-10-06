@@ -92,6 +92,7 @@ class _FakeNode:
         self._name = name
         self._params: dict = {}
         self.subscriptions_made: list = []
+        self.raw_flags: dict = {}
         self.publishers_made: list = []
         self.timers_made: list = []
 
@@ -113,9 +114,10 @@ class _FakeNode:
         self.publishers_made.append((msg_type, topic, qos))
         return object()
 
-    def create_subscription(self, msg_type, topic, cb, qos):
+    def create_subscription(self, msg_type, topic, cb, qos, raw=False):
         # Record EVERYTHING so the test can assert no bogus types slip through.
         self.subscriptions_made.append((msg_type, topic, qos))
+        self.raw_flags[topic] = raw
         return object()
 
     def create_timer(self, period, cb):
@@ -306,3 +308,12 @@ def test_resolvable_topic_binds_with_real_class_and_qos(cleanup_modules):
     # An explicit QoS profile object (our fake QoSProfile), never a bare int.
     assert not isinstance(qos, int)
     assert hasattr(qos, "kw"), f"expected a QoSProfile, got {qos!r}"
+
+
+def test_liveness_subscriptions_skip_deserialization(cleanup_modules):
+    """Watched topics bind with raw=True: the adapters only use arrival times,
+    and deserializing a 500 Hz /lowstate in Python cost most of a core onboard.
+    """
+    mod = _install_fakes(graph={"/scan": ["std_msgs/msg/String"]})
+    node = _build_node(mod, freq_topics=["/scan"], dead_topics=[])
+    assert node.raw_flags == {"/scan": True}
