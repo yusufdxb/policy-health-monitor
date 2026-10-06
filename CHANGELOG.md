@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semantic versioning.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-06
 
 ### Changed (0.2.0: C++ migration)
 - Every package is C++ (`ament_cmake`). The detector, calibration, severity, hysteresis,
@@ -38,6 +38,9 @@ All notable changes to this project are documented here. Format loosely follows
   running graph (embedding to verdict, health and recovery output, CPU and memory).
 - ROS graph tests (gtest on live rclcpp graphs) for the detectors, OOD, arbiter and
   recovery nodes.
+- First onboard run on a Unitree GO2 (shadow mode, robot standing): session results,
+  figures and the isolated end-to-end chain timing on the onboard computer are in the
+  README's "On a real robot" section and status table.
 
 ### Fixed
 - Treat non-finite rolling spread as a detector-health fault.
