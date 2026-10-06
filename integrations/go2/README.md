@@ -76,7 +76,7 @@ The results of the session are in the top-level
   ```
 
 The shadow node assembles each observation with a C++ port of go2-phoenix's
-`assemble_policy_observation` (`src/phoenix/sim2real/observation.py` at `{{PHOENIX_REF}}`)
+`assemble_policy_observation` (`src/phoenix/sim2real/observation.py` at commit `23c6fb5`)
 for this policy: zero `base_lin_vel` (the stand-v3 deploy's "zeros" source), IMU gyroscope,
 projected gravity, zero velocity command, joint positions relative to the training pose
 and joint velocities in policy joint order, and the previous action. The port is pinned by
@@ -87,8 +87,8 @@ with identical results; see [Parity](#parity).
 
 `stand_v3_latent.onnx` is a stand-v3 checkpoint exported with go2-phoenix's exporter and
 `--emit-latent`, which adds a `latent` output (the policy's concatenated hidden
-activations, 384-D for stand-v3) beside `action`. In a go2-phoenix environment, from the
-same `{{PHOENIX_REF}}`:
+activations, 384-D for stand-v3) beside `action`. In a go2-phoenix environment at the
+same commit:
 
 ```bash
 python -m phoenix.sim2real.export --checkpoint <stand-v3 checkpoint> \
