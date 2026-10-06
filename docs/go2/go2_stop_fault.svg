@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000.00" height="450.00" viewBox="0 0 1000.00 450.00" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+<rect width="100%" height="100%" fill="white"/>
+<defs><clipPath id="clip0"><rect x="80.00" y="50.00" width="890.00" height="350.00"/></clipPath></defs>
+<line x1="80.00" y1="381.08" x2="970.00" y2="381.08" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="74.00" y="384.58" font-size="10" fill="#898781" text-anchor="end">0 OK</text>
+<line x1="80.00" y1="286.49" x2="970.00" y2="286.49" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="74.00" y="289.99" font-size="10" fill="#898781" text-anchor="end">1 DEGRADED</text>
+<line x1="80.00" y1="191.89" x2="970.00" y2="191.89" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="74.00" y="195.39" font-size="10" fill="#898781" text-anchor="end">2 INTERVENE</text>
+<line x1="80.00" y1="97.30" x2="970.00" y2="97.30" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="74.00" y="100.80" font-size="10" fill="#898781" text-anchor="end">3 STOP</text>
+<line x1="80.00" y1="50.00" x2="80.00" y2="400.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="80.00" y="414.00" font-size="10" fill="#898781" text-anchor="middle">-10</text>
+<line x1="254.51" y1="50.00" x2="254.51" y2="400.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="254.51" y="414.00" font-size="10" fill="#898781" text-anchor="middle">-5</text>
+<line x1="429.02" y1="50.00" x2="429.02" y2="400.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="429.02" y="414.00" font-size="10" fill="#898781" text-anchor="middle">0</text>
+<line x1="603.53" y1="50.00" x2="603.53" y2="400.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="603.53" y="414.00" font-size="10" fill="#898781" text-anchor="middle">5</text>
+<line x1="778.04" y1="50.00" x2="778.04" y2="400.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="778.04" y="414.00" font-size="10" fill="#898781" text-anchor="middle">10</text>
+<line x1="952.55" y1="50.00" x2="952.55" y2="400.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="952.55" y="414.00" font-size="10" fill="#898781" text-anchor="middle">15</text>
+<g clip-path="url(#clip0)">
+<polyline fill="none" points="-164.41,381.08 481.14,381.08 481.14,286.49 496.84,286.49 496.84,97.30 1406.04,97.30 1406.04,97.30 " stroke="#2a78d6" stroke-width="1.80" stroke-opacity="0.85" stroke-linejoin="round"/>
+<polyline fill="none" points="-163.87,381.08 481.82,381.08 481.82,286.49 499.27,286.49 499.27,97.30 1404.97,97.30 1404.97,97.30 " stroke="#52514e" stroke-width="1.80" stroke-opacity="0.85" stroke-linejoin="round"/>
+<polyline fill="none" points="-164.33,381.08 481.35,381.08 481.35,286.49 502.29,286.49 502.29,97.30 1406.25,97.30 1406.25,97.30 " stroke="#8a5fd1" stroke-width="1.80" stroke-opacity="0.85" stroke-linejoin="round"/>
+<polyline fill="none" points="-163.63,381.08 482.06,381.08 482.06,286.49 504.74,286.49 504.74,97.30 1406.96,97.30 1406.96,97.30 " stroke="#1baf7a" stroke-width="1.80" stroke-opacity="0.85" stroke-linejoin="round"/>
+<polyline fill="none" points="-164.22,381.08 481.47,381.08 481.47,286.49 505.90,286.49 505.90,97.30 1406.37,97.30 1406.37,97.30 " stroke="#c9578f" stroke-width="1.80" stroke-opacity="0.85" stroke-linejoin="round"/>
+<line x1="429.02" y1="50.00" x2="429.02" y2="400.00" stroke="#0b0b0b" stroke-width="1.40"/>
+</g>
+<line x1="80.00" y1="50.00" x2="80.00" y2="400.00" stroke="#c3c2b7"/>
+<line x1="80.00" y1="400.00" x2="970.00" y2="400.00" stroke="#c3c2b7"/>
+<text x="525.00" y="432.00" font-size="11" fill="#52514e" text-anchor="middle">time relative to fault injection (s)</text>
+<text x="80.00" y="40.00" font-size="13" fill="#0b0b0b">Policy process goes silent: /phm/health state after the fault</text>
+<rect x="82.90" y="58.50" width="358.50" height="32.00" fill="white" stroke="#e1e0d9"/>
+<text x="88.90" y="70.50" font-size="10.00" fill="#0b0b0b" text-anchor="start">median time to first non-OK 1.50 s (5/5), source phm_ood_cpp</text>
+<text x="88.90" y="83.50" font-size="10.00" fill="#0b0b0b" text-anchor="start">median time to STOP 2.10 s (5/5), source freq:/policy/embedding</text>
+<rect x="88.00" y="186.00" width="73.80" height="78.00" fill="white" fill-opacity="0.9" stroke="#e1e0d9"/>
+<line x1="94.00" y1="197.00" x2="112.00" y2="197.00" stroke="#2a78d6" stroke-width="1.80"/>
+<text x="118.00" y="200.50" font-size="9.5" fill="#0b0b0b">trial 1</text>
+<line x1="94.00" y1="211.00" x2="112.00" y2="211.00" stroke="#52514e" stroke-width="1.80"/>
+<text x="118.00" y="214.50" font-size="9.5" fill="#0b0b0b">trial 2</text>
+<line x1="94.00" y1="225.00" x2="112.00" y2="225.00" stroke="#8a5fd1" stroke-width="1.80"/>
+<text x="118.00" y="228.50" font-size="9.5" fill="#0b0b0b">trial 3</text>
+<line x1="94.00" y1="239.00" x2="112.00" y2="239.00" stroke="#1baf7a" stroke-width="1.80"/>
+<text x="118.00" y="242.50" font-size="9.5" fill="#0b0b0b">trial 4</text>
+<line x1="94.00" y1="253.00" x2="112.00" y2="253.00" stroke="#c9578f" stroke-width="1.80"/>
+<text x="118.00" y="256.50" font-size="9.5" fill="#0b0b0b">trial 5</text>
+</svg>

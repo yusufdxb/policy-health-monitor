@@ -2,27 +2,31 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>phm_recovery</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    PHM Recovery Node: subscribes to /phm/health (PolicyHealthStatus) and
-    publishes zero-velocity Twist on /phm/cmd_vel while HOLD or STOP_AND_HOLD
-    is active. Ports the HELIX SafetyEnvelope (per-action cooldown, RESUME
-    exempt from cooldown, action allowlist). Provides a pluggable rewind hook
-    for return-to-last-safe-waypoint (v0: logs and holds).
+    PHM recovery node: subscribes to /phm/health (PolicyHealthStatus) and, only
+    when recovery.enabled is true, publishes zero-velocity Twist on /phm/cmd_vel
+    while HOLD or STOP_AND_HOLD is actuating. SafetyEnvelope ported from HELIX
+    (per-action cooldown, RESUME exempt from cooldown, action allowlist);
+    pluggable rewind hook (default: log and hold). Logic in phm_core.
   </description>
   <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
-  <depend>rclpy</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
   <depend>geometry_msgs</depend>
-  <depend>rcl_interfaces</depend>
-
-  <!-- phm_msgs provides PolicyHealthStatus (the subscription topic). -->
+  <depend>phm_core</depend>
   <depend>phm_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>rclcpp</depend>
 
-  <test_depend>python3-pytest</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

@@ -26,5 +26,6 @@
     # the OOD node and arbiter to filter by policy when multiple policies run.
     policy_id: "phm_sim"
 
-    # RNG seed for reproducible streams in CI and offline tests.
+    # RNG seed for reproducible streams in CI and offline tests (the same
+    # stream numpy.random.default_rng(seed) produces).
     seed: 42

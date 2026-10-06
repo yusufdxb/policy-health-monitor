@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!--
+  Start the phm_sim embedding publisher with config/phm_sim.yaml. It publishes
+  phm_msgs/PolicyEmbedding on /policy/embedding: n_in_dist healthy frames, then
+  a collapsed (OOD) phase.
+
+    ros2 launch phm_sim sim.launch.xml
+-->
+<launch>
+  <node pkg="phm_sim" exec="embedding_publisher" name="phm_sim" output="screen">
+    <param from="$(find-pkg-share phm_sim)/config/phm_sim.yaml"/>
+  </node>
+</launch>

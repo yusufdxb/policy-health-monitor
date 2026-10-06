@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960.00" height="600.00" viewBox="0 0 960.00 600.00" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+<rect width="100%" height="100%" fill="white"/>
+<defs><clipPath id="clip0"><rect x="90.00" y="80.00" width="760.00" height="440.00"/></clipPath></defs>
+<line x1="90.00" y1="511.65" x2="850.00" y2="511.65" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="84.00" y="515.15" font-size="10" fill="#898781" text-anchor="end">0</text>
+<line x1="90.00" y1="372.41" x2="850.00" y2="372.41" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="84.00" y="375.91" font-size="10" fill="#898781" text-anchor="end">0.5</text>
+<line x1="90.00" y1="233.16" x2="850.00" y2="233.16" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="84.00" y="236.66" font-size="10" fill="#898781" text-anchor="end">1</text>
+<line x1="90.00" y1="93.92" x2="850.00" y2="93.92" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="84.00" y="97.42" font-size="10" fill="#898781" text-anchor="end">1.5</text>
+<line x1="124.55" y1="80.00" x2="124.55" y2="520.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="124.55" y="534.00" font-size="10" fill="#898781" text-anchor="middle">0</text>
+<line x1="262.73" y1="80.00" x2="262.73" y2="520.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="262.73" y="534.00" font-size="10" fill="#898781" text-anchor="middle">0.2</text>
+<line x1="400.91" y1="80.00" x2="400.91" y2="520.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="400.91" y="534.00" font-size="10" fill="#898781" text-anchor="middle">0.4</text>
+<line x1="539.09" y1="80.00" x2="539.09" y2="520.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="539.09" y="534.00" font-size="10" fill="#898781" text-anchor="middle">0.6</text>
+<line x1="677.27" y1="80.00" x2="677.27" y2="520.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="677.27" y="534.00" font-size="10" fill="#898781" text-anchor="middle">0.8</text>
+<line x1="815.45" y1="80.00" x2="815.45" y2="520.00" stroke="#e1e0d9" stroke-width="0.8"/>
+<text x="815.45" y="534.00" font-size="10" fill="#898781" text-anchor="middle">1</text>
+<g clip-path="url(#clip0)">
+<polyline fill="none" points="124.55,511.65 159.09,491.62 193.64,472.76 228.18,454.41 262.73,433.76 297.27,413.42 331.82,397.81 366.36,380.98 400.91,364.01 435.45,346.01 470.00,333.07 504.55,317.15 539.09,311.54 573.64,295.16 608.18,287.04 642.73,272.38 677.27,267.30 711.82,254.39 746.36,249.75 780.91,246.88 815.45,233.16 " stroke="#b0472b" stroke-width="1.50" stroke-opacity="1.00" stroke-linejoin="round"/>
+<circle cx="124.55" cy="511.65" r="3" fill="#b0472b"/>
+<circle cx="159.09" cy="491.62" r="3" fill="#b0472b"/>
+<circle cx="193.64" cy="472.76" r="3" fill="#b0472b"/>
+<circle cx="228.18" cy="454.41" r="3" fill="#b0472b"/>
+<circle cx="262.73" cy="433.76" r="3" fill="#b0472b"/>
+<circle cx="297.27" cy="413.42" r="3" fill="#b0472b"/>
+<circle cx="331.82" cy="397.81" r="3" fill="#b0472b"/>
+<circle cx="366.36" cy="380.98" r="3" fill="#b0472b"/>
+<circle cx="400.91" cy="364.01" r="3" fill="#b0472b"/>
+<circle cx="435.45" cy="346.01" r="3" fill="#b0472b"/>
+<circle cx="470.00" cy="333.07" r="3" fill="#b0472b"/>
+<circle cx="504.55" cy="317.15" r="3" fill="#b0472b"/>
+<circle cx="539.09" cy="311.54" r="3" fill="#b0472b"/>
+<circle cx="573.64" cy="295.16" r="3" fill="#b0472b"/>
+<circle cx="608.18" cy="287.04" r="3" fill="#b0472b"/>
+<circle cx="642.73" cy="272.38" r="3" fill="#b0472b"/>
+<circle cx="677.27" cy="267.30" r="3" fill="#b0472b"/>
+<circle cx="711.82" cy="254.39" r="3" fill="#b0472b"/>
+<circle cx="746.36" cy="249.75" r="3" fill="#b0472b"/>
+<circle cx="780.91" cy="246.88" r="3" fill="#b0472b"/>
+<circle cx="815.45" cy="233.16" r="3" fill="#b0472b"/>
+<polyline fill="none" points="124.55,508.72 159.09,510.18 193.64,511.16 228.18,511.16 262.73,503.84 297.27,501.89 331.82,509.69 366.36,491.16 400.91,494.58 435.45,470.68 470.00,454.10 504.55,446.29 539.09,445.32 573.64,421.42 608.18,381.92 642.73,354.12 677.27,358.99 711.82,352.17 746.36,345.34 780.91,326.32 815.45,315.59 " stroke="#2a78d6" stroke-width="1.50" stroke-opacity="1.00" stroke-linejoin="round"/>
+<rect x="121.55" y="505.72" width="6" height="6" fill="#2a78d6"/>
+<rect x="156.09" y="507.18" width="6" height="6" fill="#2a78d6"/>
+<rect x="190.64" y="508.16" width="6" height="6" fill="#2a78d6"/>
+<rect x="225.18" y="508.16" width="6" height="6" fill="#2a78d6"/>
+<rect x="259.73" y="500.84" width="6" height="6" fill="#2a78d6"/>
+<rect x="294.27" y="498.89" width="6" height="6" fill="#2a78d6"/>
+<rect x="328.82" y="506.69" width="6" height="6" fill="#2a78d6"/>
+<rect x="363.36" y="488.16" width="6" height="6" fill="#2a78d6"/>
+<rect x="397.91" y="491.58" width="6" height="6" fill="#2a78d6"/>
+<rect x="432.45" y="467.68" width="6" height="6" fill="#2a78d6"/>
+<rect x="467.00" y="451.10" width="6" height="6" fill="#2a78d6"/>
+<rect x="501.55" y="443.29" width="6" height="6" fill="#2a78d6"/>
+<rect x="536.09" y="442.32" width="6" height="6" fill="#2a78d6"/>
+<rect x="570.64" y="418.42" width="6" height="6" fill="#2a78d6"/>
+<rect x="605.18" y="378.92" width="6" height="6" fill="#2a78d6"/>
+<rect x="639.73" y="351.12" width="6" height="6" fill="#2a78d6"/>
+<rect x="674.27" y="355.99" width="6" height="6" fill="#2a78d6"/>
+<rect x="708.82" y="349.17" width="6" height="6" fill="#2a78d6"/>
+<rect x="743.36" y="342.34" width="6" height="6" fill="#2a78d6"/>
+<rect x="777.91" y="323.32" width="6" height="6" fill="#2a78d6"/>
+<rect x="812.45" y="312.59" width="6" height="6" fill="#2a78d6"/>
+<line x1="90.00" y1="372.41" x2="850.00" y2="372.41" stroke="#b0472b" stroke-width="0.80" stroke-dasharray="2,3"/>
+<line x1="90.00" y1="497.72" x2="850.00" y2="497.72" stroke="#2a78d6" stroke-width="0.80" stroke-dasharray="2,3"/>
+<line x1="366.36" y1="80.00" x2="366.36" y2="520.00" stroke="#2a78d6" stroke-width="1.60"/>
+<line x1="400.91" y1="80.00" x2="400.91" y2="520.00" stroke="#b0472b" stroke-width="1.60"/>
+</g>
+<line x1="90.00" y1="80.00" x2="90.00" y2="520.00" stroke="#c3c2b7"/>
+<line x1="90.00" y1="520.00" x2="850.00" y2="520.00" stroke="#c3c2b7"/>
+<text x="470.00" y="552.00" font-size="11" fill="#52514e" text-anchor="middle">alpha (0 = clean input, 1 = full distribution shift)</text>
+<text transform="translate(38.00,300.00) rotate(-90)" font-size="11" fill="#52514e" text-anchor="middle">normalized output error / monitor fired fraction (0..1)</text>
+<text x="90.00" y="70.00" font-size="13" fill="#0b0b0b">PHM internal-feature monitor vs stand-in policy output collapse</text>
+<defs><clipPath id="clip1"><rect x="90.00" y="80.00" width="760.00" height="440.00"/></clipPath></defs>
+<text x="856.00" y="466.42" font-size="10" fill="#898781" text-anchor="start">5</text>
+<text x="856.00" y="363.31" font-size="10" fill="#898781" text-anchor="start">6</text>
+<text x="856.00" y="260.20" font-size="10" fill="#898781" text-anchor="start">7</text>
+<text x="856.00" y="157.08" font-size="10" fill="#898781" text-anchor="start">8</text>
+<g clip-path="url(#clip1)">
+<polyline fill="none" points="124.55,264.20 159.09,262.72 193.64,265.95 228.18,256.00 262.73,273.50 297.27,290.87 331.82,294.23 366.36,314.51 400.91,324.78 435.45,354.12 470.00,368.03 504.55,381.53 539.09,367.56 573.64,399.73 608.18,429.92 642.73,453.67 677.27,446.52 711.82,470.53 746.36,467.97 780.91,474.24 815.45,507.43 " stroke="#1baf7a" stroke-width="1.50" stroke-opacity="0.80" stroke-dasharray="6,4" stroke-linejoin="round"/>
+<polygon points="124.55,260.20 121.05,267.20 128.05,267.20" fill="#1baf7a"/>
+<polygon points="159.09,258.72 155.59,265.72 162.59,265.72" fill="#1baf7a"/>
+<polygon points="193.64,261.95 190.14,268.95 197.14,268.95" fill="#1baf7a"/>
+<polygon points="228.18,252.00 224.68,259.00 231.68,259.00" fill="#1baf7a"/>
+<polygon points="262.73,269.50 259.23,276.50 266.23,276.50" fill="#1baf7a"/>
+<polygon points="297.27,286.87 293.77,293.87 300.77,293.87" fill="#1baf7a"/>
+<polygon points="331.82,290.23 328.32,297.23 335.32,297.23" fill="#1baf7a"/>
+<polygon points="366.36,310.51 362.86,317.51 369.86,317.51" fill="#1baf7a"/>
+<polygon points="400.91,320.78 397.41,327.78 404.41,327.78" fill="#1baf7a"/>
+<polygon points="435.45,350.12 431.95,357.12 438.95,357.12" fill="#1baf7a"/>
+<polygon points="470.00,364.03 466.50,371.03 473.50,371.03" fill="#1baf7a"/>
+<polygon points="504.55,377.53 501.05,384.53 508.05,384.53" fill="#1baf7a"/>
+<polygon points="539.09,363.56 535.59,370.56 542.59,370.56" fill="#1baf7a"/>
+<polygon points="573.64,395.73 570.14,402.73 577.14,402.73" fill="#1baf7a"/>
+<polygon points="608.18,425.92 604.68,432.92 611.68,432.92" fill="#1baf7a"/>
+<polygon points="642.73,449.67 639.23,456.67 646.23,456.67" fill="#1baf7a"/>
+<polygon points="677.27,442.52 673.77,449.52 680.77,449.52" fill="#1baf7a"/>
+<polygon points="711.82,466.53 708.32,473.53 715.32,473.53" fill="#1baf7a"/>
+<polygon points="746.36,463.97 742.86,470.97 749.86,470.97" fill="#1baf7a"/>
+<polygon points="780.91,470.24 777.41,477.24 784.41,477.24" fill="#1baf7a"/>
+<polygon points="815.45,503.43 811.95,510.43 818.95,510.43" fill="#1baf7a"/>
+<line x1="90.00" y1="442.92" x2="850.00" y2="442.92" stroke="#1baf7a" stroke-width="1.00" stroke-dasharray="6,4"/>
+</g>
+<line x1="850.00" y1="80.00" x2="850.00" y2="520.00" stroke="#c3c2b7"/>
+<text transform="translate(908.00,300.00) rotate(-90)" font-size="11" fill="#52514e" text-anchor="middle">OOD score: mean rolling spread of policy embedding</text>
+<rect x="98.00" y="88.00" width="306.00" height="120.00" fill="white" fill-opacity="0.9" stroke="#e1e0d9"/>
+<line x1="104.00" y1="99.00" x2="122.00" y2="99.00" stroke="#b0472b" stroke-width="1.50"/>
+<circle cx="113.00" cy="99.00" r="3" fill="#b0472b"/>
+<text x="128.00" y="102.50" font-size="9.5" fill="#0b0b0b">normalized output error</text>
+<line x1="104.00" y1="113.00" x2="122.00" y2="113.00" stroke="#2a78d6" stroke-width="1.50"/>
+<rect x="110.00" y="110.00" width="6" height="6" fill="#2a78d6"/>
+<text x="128.00" y="116.50" font-size="9.5" fill="#0b0b0b">monitor fired fraction (frames below threshold)</text>
+<line x1="104.00" y1="127.00" x2="122.00" y2="127.00" stroke="#b0472b" stroke-width="1.00" stroke-dasharray="2,3"/>
+<text x="128.00" y="130.50" font-size="9.5" fill="#0b0b0b">output degradation level (0.50)</text>
+<line x1="104.00" y1="141.00" x2="122.00" y2="141.00" stroke="#2a78d6" stroke-width="1.00" stroke-dasharray="2,3"/>
+<text x="128.00" y="144.50" font-size="9.5" fill="#0b0b0b">monitor tripwire (0.05, clean FPR=0.011)</text>
+<line x1="104.00" y1="155.00" x2="122.00" y2="155.00" stroke="#2a78d6" stroke-width="1.60"/>
+<text x="128.00" y="158.50" font-size="9.5" fill="#0b0b0b">MONITOR fires @ alpha=0.35</text>
+<line x1="104.00" y1="169.00" x2="122.00" y2="169.00" stroke="#b0472b" stroke-width="1.60"/>
+<text x="128.00" y="172.50" font-size="9.5" fill="#0b0b0b">OUTPUT collapses @ alpha=0.40</text>
+<line x1="104.00" y1="183.00" x2="122.00" y2="183.00" stroke="#1baf7a" stroke-width="1.50" stroke-dasharray="6,4"/>
+<polygon points="113.00,179.00 109.50,186.00 116.50,186.00" fill="#1baf7a"/>
+<text x="128.00" y="186.50" font-size="9.5" fill="#0b0b0b">OOD score (mean rolling spread of hidden features)</text>
+<line x1="104.00" y1="197.00" x2="122.00" y2="197.00" stroke="#1baf7a" stroke-width="1.00" stroke-dasharray="6,4"/>
+<text x="128.00" y="200.50" font-size="9.5" fill="#0b0b0b">calibrated OOD threshold (5.1939)</text>
+<text x="90.00" y="52.00" font-size="11.00" fill="#52514e">measured lead-time = +0.05 alpha (positive = monitor fires earlier)</text>
+</svg>
