@@ -98,11 +98,16 @@ this detector. `stop` removes the embedding stream, so it exercises liveness che
 than the latent statistics. This is not a real policy failing in the field, and it is not
 evidence that PHM warns before a behavioral failure. One gap is known and open: a
 rolling-spread collapse detector calibrated on a still robot can confuse "the robot is
-still" with "the policy collapsed" when the robot goes from moving to still.
-{{STANDUP_OBSERVATION}}
+still" with "the policy collapsed" when the robot goes from moving to still. The opposite
+change was seen once, in an earlier 0.1.x session calibrated with the robot lying down:
+when the operator stood the robot up with the remote, the rolling spread peaked at about
+80,000 times its lying-down median, then settled about 1.6 times higher while standing.
+PHM stayed `OK` throughout (4,369 of 4,369 `/phm/health` messages; 0 of 10,922 OOD
+verdicts violating). That is correct for a collapse detector, and it also shows the
+detector's blind side: the test is one-sided, so a burst of variance never raises it.
 
 **Bugs that only the robot found.** Running on the GO2 exposed three bugs the test suite
-had missed, all fixed in commit `710b5d6`:
+had missed, all fixed in commit `0c01a83`:
 
 1. The arbiter crashed on the first live verdict. It set an attribute on the received
    message, and generated rclpy message classes use `__slots__`, so `/phm/health` had

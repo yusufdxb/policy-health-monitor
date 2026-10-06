@@ -237,7 +237,11 @@ How the numbers are defined:
 - Open: a rolling-spread collapse detector calibrated on a still robot can confuse "the
   robot is still" with "the policy collapsed" when the robot goes from moving to still.
   This has not been tested.
-- {{STANDUP_OBSERVATION}}
+- The opposite change was seen once, in an earlier 0.1.x session calibrated with the robot
+  lying down: when the operator stood the robot up, the rolling spread peaked at about
+  80,000 times its lying-down median and settled about 1.6 times higher while standing.
+  PHM stayed `OK` throughout (4,369 of 4,369 health messages, 0 of 10,922 OOD verdicts
+  violating). The test is one-sided, so a burst of variance never raises it.
 - `phm_recovery` was never launched, so no recovery action was exercised on hardware.
 - The recorded session used the 0.1.x tools: the Python shadow node (onnxruntime Python
   API), the Python probe, detectors and arbiter, and the original C++ OOD node. The C++
