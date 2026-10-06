@@ -381,11 +381,12 @@
           <tr><td class="metric">AUROC &#8593;</td><td>phm_ood (rolling-spread)</td><td>1.000 [1.000, 1.000]</td><td>&#8805; 0.90</td></tr>
           <tr><td class="metric">AUPR &#8593;</td><td>phm_ood (rolling-spread)</td><td>1.000 [1.000, 1.000]</td><td>&#8805; 0.85</td></tr>
           <tr><td class="metric">FPR@95 &#8595;</td><td>phm_ood (rolling-spread)</td><td>0.000 [0.000, 0.000]</td><td>&#8804; 0.10</td></tr>
-          <tr><td class="metric">runtime latency &#8595;</td><td>C++ node, workstation CPU</td><td>0.093 ms / frame</td><td>&#8804; 5 ms</td></tr>
+          <tr><td class="metric">detector step &#8595;</td><td>C++ core, desktop x86-64</td><td>0.004 ms / frame</td><td>&#8804; 5 ms</td></tr>
+          <tr><td class="metric">detector step &#8595;</td><td>C++ core, onboard a Unitree GO2</td><td>0.015 ms / frame</td><td>&#8804; 5 ms</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="results-foot rise d3">Numbers above are the collapse-mode result on synthetic embedding streams, where the second-order (variance-collapse) anomaly is invisible to distance and reconstruction baselines (Mahalanobis 0.075, KNN 0.030, RND 0.026 AUROC) but caught at 1.000 by the spread monitor. Full table, the shift-mode comparison, and bootstrap CIs live in <code>benchmark/RESULTS.md</code>. Hardware and real-policy numbers are still pending a compute target.</p>
+    <p class="results-foot rise d3">Numbers above are the collapse-mode result on synthetic embedding streams, where the second-order (variance-collapse) anomaly is invisible to distance and reconstruction baselines (Mahalanobis 0.075, KNN 0.030, RND 0.026 AUROC) but caught at 1.000 by the spread monitor. Full table, the shift-mode comparison, and bootstrap CIs live in <code>benchmark/RESULTS.md</code>. On the robot, with a real locomotion policy in shadow mode, the numbers are in the README&#8217;s &#8220;On a real robot&#8221; section.</p>
   </div>
 </section>
 
@@ -396,7 +397,7 @@
       <span class="sec-num">04</span>
       <div>
         <h2>Honest status</h2>
-        <p class="sec-sub">What is certified in simulation today, and what is explicitly still pending hardware. No claim here outruns the evidence behind it.</p>
+        <p class="sec-sub">What is tested in software, what has run on the robot, and what is still open. No claim here outruns the evidence behind it.</p>
       </div>
     </div>
 
@@ -412,9 +413,9 @@
         <p>phm_ood, phm_detectors, phm_arbiter, and phm_recovery are thin rclcpp nodes over the tested core, exercised on live ROS 2 graphs with synthetic input (phm_sim).</p>
       </div>
       <div class="ss amber rise d4">
-        <span class="badge">PENDING HARDWARE</span>
-        <h4>On-robot validation</h4>
-        <p>End-to-end latency and recovery actuation are not yet validated on a physical compute target. Hardware bring-up is gated on lab access and is tracked as an open item, not claimed as done.</p>
+        <span class="badge">ON THE ROBOT, SHADOW MODE</span>
+        <h4>Onboard a Unitree GO2</h4>
+        <p>Ran onboard the GO2 beside a real locomotion policy that never controlled the robot, robot standing still: 0 non-OK health messages in 300 s, and software-induced faults reached STOP in 5 of 5 trials each. Still open: a walking robot, a policy in control, and recovery actuation.</p>
       </div>
     </div>
   </div>

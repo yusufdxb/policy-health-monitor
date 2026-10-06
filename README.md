@@ -2,8 +2,8 @@
 
 **A runtime watchdog for learned robot policies: it reads the policy's own internal
 embeddings and raises `OK`, `DEGRADED`, `INTERVENE`, or `STOP` (each with a
-human-readable reason and a recommended action) before the robot's behavior visibly
-breaks.** It is for engineers running a learned controller on a robot who need a
+human-readable reason and a recommended action) when the policy's internal state freezes
+or collapses.** It is for engineers running a learned controller on a robot who need a
 supervisor that can hand control to a safe fallback in time.
 
 ## What problem this solves
