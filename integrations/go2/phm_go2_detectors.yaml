@@ -1,0 +1,25 @@
+# phm_detectors parameters for an onboard run on a Unitree GO2 (its onboard computer).
+# The watched topics are the robot's own state streams plus the shadow policy's
+# latent. Rates measured on this robot: /lowstate 500 Hz, /sportmodestate ~295 Hz,
+# /utlidar/imu ~248 Hz, /utlidar/cloud ~15 Hz; /policy/embedding is 50 Hz.
+/**:
+  ros__parameters:
+    freq_topics:
+      - /lowstate
+      - /sportmodestate
+      - /utlidar/imu
+      - /utlidar/cloud
+      - /policy/embedding
+    freq_tolerance_percent: 20.0
+    freq_min_consecutive: 2
+    threshold_cpu_limit: 80.0
+    threshold_mem_limit: 85.0
+    threshold_temp_limit: 85.0
+    threshold_min_consecutive: 2
+    dead_timeout_sec: 2.0
+    dead_topics:
+      - /lowstate
+      - /sportmodestate
+      - /utlidar/imu
+      - /utlidar/cloud
+      - /policy/embedding
