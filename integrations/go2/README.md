@@ -16,6 +16,7 @@ The results of the session are in the top-level
 | File | Role |
 |---|---|
 | `phoenix_shadow_embedder` (`src/shadow_embedder_node.cpp`) | Shadow policy node. Runs the latent ONNX with the ONNX Runtime C++ API on live `/lowstate` at 50 Hz, publishes `phm_msgs/PolicyEmbedding` on `/policy/embedding`. Optional `freeze_obs` or `stop` fault. |
+| `preflight.sh` | Read-only checks before a session: executables and libraries, model files, no stray or actuating processes, `/lowstate` rate, disk space. |
 | `onboard_session.sh` | Runs one session: calibrate, start PHM, nominal window, induced-fault trials, per-process CPU accounting. |
 | `phm_go2_probe` (`src/probe.cpp`) | `calibrate`: threshold from live latents. `record`: every `/phm/health`, `/phm/verdicts`, and embedding arrival to JSONL. Subscriber only. |
 | `phm_go2_detectors.yaml` | `phm_detectors` parameters: rate and dead-topic checks on the robot's state topics and the latent, plus CPU, memory, and GPU-temperature limits. |
@@ -108,12 +109,18 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=<config bound to the robot-facing network interface>
 source <policy-health-monitor>/install/setup.bash
 ros2 daemon stop          # drop discovery state cached from an earlier environment
-ros2 topic hz /lowstate   # expect about 500 Hz, then Ctrl-C
 
 cd <policy-health-monitor>
+integrations/go2/preflight.sh
 PHM_GO2_DEPS=$HOME/phm_go2_deps NOM_SEC={{NOM_SEC}} TRIALS={{TRIALS}} \
   integrations/go2/onboard_session.sh session_out
 ```
+
+`preflight.sh` is read-only. It checks that the session's executables and their libraries
+resolve, the model files exist, no PHM process from an earlier run is still up,
+`phm_recovery` is not running and nothing publishes `/phm/cmd_vel`, `/lowstate` arrives at
+400 Hz or more (`MIN_LOWSTATE_HZ`), and there is room for the output. Start the session
+only when it prints `preflight passed`.
 
 The session runs in four phases:
 
@@ -143,7 +150,7 @@ process per node; it still uses `ros2 lifecycle set` for the OOD node's transiti
 | `WINDOW` | 30 | rolling-spread window, frames (0.6 s at 50 Hz) |
 | `PERCENTILE` | 1.0 | calibration percentile |
 | `MIN_CONSEC` | 3 | consecutive below-threshold frames before the C++ OOD node reports a violation |
-| `ARB_STALENESS` | 1.0 | arbiter staleness limit, seconds |
+| `ARB_STALENESS` | 1.5 | arbiter staleness limit, seconds. Must exceed the detectors node's 1 s verdict period: at 1.0 the arbiter can briefly report a verdict as stale (`DEGRADED`, reason `stale:...`) whenever its timer lines up with the detectors' tick, which the C++ nodes' near-simultaneous startup makes likely. The 0.1.x sessions used 1.0 |
 | `PHM_BACKEND` | `plain` | C++ rolling-spread backend; `plain` measured about 2x faster than `eigen` on the GO2 |
 
 The faults, both injected inside the shadow node and both still without actuation:

@@ -32,6 +32,10 @@ int main()
 }
 CPP
 args=()
+# Ninja when present: a minimal image may have it but not make.
+if command -v ninja >/dev/null 2>&1; then
+  args+=(-G Ninja)
+fi
 if [ $# -ge 1 ]; then
   args+=("-DCMAKE_PREFIX_PATH=$1")
   export LD_LIBRARY_PATH="$1/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

@@ -114,7 +114,7 @@ if(PHM_GO2_AMENT)
       "(source the unitree_ros2 workspace); not built")
   endif()
   install(FILES phm_go2_detectors.yaml DESTINATION share/${PROJECT_NAME})
-  install(PROGRAMS onboard_session.sh DESTINATION share/${PROJECT_NAME})
+  install(PROGRAMS onboard_session.sh preflight.sh DESTINATION share/${PROJECT_NAME})
 endif()
 
 # ---------------------------------------------------------------------------

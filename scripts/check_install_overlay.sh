@@ -51,7 +51,7 @@ share_files=(
   phm_arbiter/launch/arbiter.launch.xml phm_arbiter/config/phm_arbiter.yaml
   phm_recovery/launch/recovery.launch.xml phm_recovery/config/recovery.yaml
   phm_sim/launch/sim.launch.xml phm_sim/config/phm_sim.yaml
-  phm_go2/phm_go2_detectors.yaml phm_go2/onboard_session.sh
+  phm_go2/phm_go2_detectors.yaml phm_go2/onboard_session.sh phm_go2/preflight.sh
 )
 
 check_exe() {

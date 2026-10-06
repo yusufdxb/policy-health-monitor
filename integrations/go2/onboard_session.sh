@@ -28,7 +28,11 @@ FAULT_AT="${FAULT_AT:-20}"
 WINDOW="${WINDOW:-30}"
 PERCENTILE="${PERCENTILE:-1.0}"
 MIN_CONSEC="${MIN_CONSEC:-3}"
-ARB_STALENESS="${ARB_STALENESS:-1.0}"
+# Above the detectors node's 1 s verdict period: at exactly 1.0 the arbiter's
+# 20 Hz check can land a few ms before the next 1 Hz verdict arrives and report
+# a brief stale DEGRADED. The C++ nodes start within milliseconds of each other,
+# which lines their timers up that way. The 0.1.x sessions used 1.0.
+ARB_STALENESS="${ARB_STALENESS:-1.5}"
 export PHM_BACKEND="${PHM_BACKEND:-plain}"  # plain measured about 2x faster than eigen on the GO2
 
 # Path of an executable installed by a colcon package in the sourced overlay.
@@ -60,8 +64,16 @@ cleanup() {
   for p in "${PIDS[@]}" $EMB_PID; do kill -KILL -- "-$p" 2>/dev/null || true; done
 }
 
-cpu_seconds() {  # cumulative CPU seconds of every process in group $1
-  ps -o times= -g "$1" 2>/dev/null | awk '{s += $1} END {print s + 0}'
+cpu_seconds() {  # cumulative CPU seconds (user + system) of every process in group $1
+  # From /proc in clock ticks: `ps -o times` counts whole seconds, which rounds
+  # a node using about 1% of a core to zero over a two-minute phase.
+  local pid ticks=0 tck
+  tck="$(getconf CLK_TCK)"
+  for pid in $(ps -o pid= -g "$1" 2>/dev/null); do
+    # Fields after "pid (comm) ": $12 = utime, $13 = stime.
+    ticks=$((ticks + $(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{t += $12 + $13} END {print t + 0}')))
+  done
+  awk -v t="$ticks" -v k="$tck" 'BEGIN {printf "%.2f", t / k}'
 }
 trap cleanup EXIT
 
@@ -134,7 +146,7 @@ T1="$(date +%s.%N)"
   for i in "${!GROUPS_[@]}"; do
     c1="$(cpu_seconds "${GROUPS_[$i]}")"
     awk -v n="${NAMES[$i]}" -v a="${CPU0[$i]}" -v b="$c1" -v t0="$T0" -v t1="$T1" \
-      'BEGIN {printf "%s, %d, %.1f, %.1f\n", n, b - a, t1 - t0, 100 * (b - a) / (t1 - t0)}'
+      'BEGIN {printf "%s, %.2f, %.1f, %.2f\n", n, b - a, t1 - t0, 100 * (b - a) / (t1 - t0)}'
   done
   echo "# nproc $(nproc)"
 } >"$OUT/cpu_nominal.csv"

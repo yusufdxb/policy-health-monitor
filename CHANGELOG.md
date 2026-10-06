@@ -58,6 +58,12 @@ All notable changes to this project are documented here. Format loosely follows
   counter saturates instead of overflowing.
 - `phoenix_shadow_embedder` refuses a model without an `action` output at startup;
   `phoenix_shadow_replay` validates its input arrays.
+- GO2 session: `onboard_session.sh` measured CPU in whole seconds (`ps -o times`), which
+  rounds the C++ nodes (about 1% of a core) to zero; it now reads clock ticks from `/proc`.
+  Its `ARB_STALENESS` default is 1.5 s instead of 1.0 s: with 1 Hz detector verdicts, a
+  1.0 s limit produced brief stale `DEGRADED` reports when the arbiter's timer lined up
+  with the detectors' tick (seen in a desktop rehearsal: 4 of 1200 nominal health
+  messages). `preflight.sh` checks the setup before a session.
 - `vla_monitor_demo/README.md` stated a +0.050 lead time on a 41-point alpha grid
   (monitor 0.325, output 0.375). Neither the Python demo nor its C++ port reproduces that:
   both give +0.025 (monitor 0.350, output 0.375). The README now says so; the 21-point
