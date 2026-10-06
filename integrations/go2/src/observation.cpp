@@ -60,11 +60,15 @@ Fault parse_fault(const std::string & name)
   if (name == "freeze_obs") {
     return Fault::kFreezeObs;
   }
+  if (name == "freeze_sensors") {
+    return Fault::kFreezeSensors;
+  }
   if (name == "stop") {
     return Fault::kStop;
   }
   throw std::invalid_argument(
-    "fault must be one of ('none', 'freeze_obs', 'stop'), got '" + name + "'");
+    "fault must be one of ('none', 'freeze_obs', 'freeze_sensors', 'stop'), got '" + name +
+    "'");
 }
 
 ShadowStepper::ShadowStepper(Policy & policy, Fault fault)
@@ -86,7 +90,15 @@ StepOutcome ShadowStepper::step(const LowStateSample * latest, bool fault_active
     }
     return StepOutcome::kStopped;
   }
-  if (!(on && fault_ == Fault::kFreezeObs && frozen_)) {
+  if (on && fault_ == Fault::kFreezeSensors) {
+    if (!frozen_) {
+      frozen_sample_ = *latest;
+      frozen_ = true;
+      just_injected_ = true;
+    }
+    // Stale sensors, live last action.
+    assemble_observation(frozen_sample_, last_action_, obs_.data());
+  } else if (!(on && fault_ == Fault::kFreezeObs && frozen_)) {
     assemble_observation(*latest, last_action_, obs_.data());
     if (on && fault_ == Fault::kFreezeObs) {
       frozen_ = true;

@@ -92,8 +92,8 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-enum class Fault { kNone, kFreezeObs, kStop };
-// "none" | "freeze_obs" | "stop"; throws std::invalid_argument otherwise.
+enum class Fault { kNone, kFreezeObs, kFreezeSensors, kStop };
+// "none" | "freeze_obs" | "freeze_sensors" | "stop"; throws std::invalid_argument otherwise.
 Fault parse_fault(const std::string & name);
 
 enum class StepOutcome
@@ -109,6 +109,11 @@ enum class StepOutcome
 //   - freeze_obs: the first faulted tick assembles the observation as usual
 //     and freezes it; every later tick feeds that same observation, last-action
 //     term included, so the latent becomes constant.
+//   - freeze_sensors: the first faulted tick keeps a copy of the reading it
+//     used; every later tick assembles the observation from that frozen
+//     reading plus the live last_action (the policy's own previous action),
+//     runs the policy and updates last_action. The sensor terms obs[0..36)
+//     stay constant while obs[36..48) keep following the policy's own actions.
 //   - otherwise the observation is assembled from the latest reading, and the
 //     action becomes the next tick's last_action.
 class ShadowStepper
@@ -132,6 +137,7 @@ private:
   Fault fault_;
   std::array<float, kObsDim> obs_{};
   std::array<float, kJoints> last_action_{};
+  LowStateSample frozen_sample_{};  // freeze_sensors: the reading kept at the fault
   bool frozen_ = false;
   bool fault_logged_ = false;
   bool just_injected_ = false;

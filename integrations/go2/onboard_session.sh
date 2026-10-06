@@ -8,6 +8,8 @@
 #   2 nominal     NOM_SEC of the full graph with no fault -> false-alarm rate, CPU cost
 #   3 freeze_obs  TRIALS runs: policy fed a stale snapshot FAULT_AT s into FAULT_SEC
 #   4 stop        TRIALS runs: policy process goes silent FAULT_AT s into FAULT_SEC
+#   (optional) sensors  freeze_sensors trials: stale sensor reading, live last action;
+#                 enabled through FAULTS (default "freeze stop")
 #
 # Every process starts in its own process group (setsid) and is stopped by group.
 # Executables are run directly from the sourced colcon overlay (no `ros2 run`
@@ -25,6 +27,7 @@ NOM_SEC="${NOM_SEC:-120}"
 TRIALS="${TRIALS:-1}"
 FAULT_SEC="${FAULT_SEC:-45}"
 FAULT_AT="${FAULT_AT:-20}"
+FAULTS="${FAULTS:-freeze stop}"  # fault kinds per trial round, in order: freeze stop sensors
 WINDOW="${WINDOW:-30}"
 PERCENTILE="${PERCENTILE:-1.0}"
 MIN_CONSEC="${MIN_CONSEC:-3}"
@@ -34,6 +37,33 @@ MIN_CONSEC="${MIN_CONSEC:-3}"
 # which lines their timers up that way. The 0.1.x sessions used 1.0.
 ARB_STALENESS="${ARB_STALENESS:-1.5}"
 export PHM_BACKEND="${PHM_BACKEND:-plain}"  # plain measured about 2x faster than eigen on the GO2
+
+# Embedder fault mode of a fault kind (freeze | stop | sensors).
+fault_mode() {
+  case "$1" in
+    freeze) echo freeze_obs ;;
+    stop) echo stop ;;
+    sensors) echo freeze_sensors ;;
+    *) return 1 ;;
+  esac
+}
+
+# Validate FAULTS before anything starts.
+read -r -a FAULT_KINDS <<<"$FAULTS"
+if [ "${#FAULT_KINDS[@]}" -eq 0 ]; then
+  echo "FAULTS is empty; use any of: freeze stop sensors" >&2
+  exit 2
+fi
+for kind in "${FAULT_KINDS[@]}"; do
+  if ! fault_mode "$kind" >/dev/null; then
+    echo "unknown fault kind '$kind' in FAULTS='$FAULTS'; valid kinds: freeze stop sensors" >&2
+    exit 2
+  fi
+  if [ "$(printf '%s\n' "${FAULT_KINDS[@]}" | grep -cx -- "$kind")" -ne 1 ]; then
+    echo "fault kind '$kind' repeated in FAULTS='$FAULTS'" >&2
+    exit 2
+  fi
+done
 
 # Path of an executable installed by a colcon package in the sourced overlay.
 find_exe() {  # $1 = package, $2 = executable
@@ -77,7 +107,7 @@ cpu_seconds() {  # cumulative CPU seconds (user + system) of every process in gr
 }
 trap cleanup EXIT
 
-start_embedder() {  # $1 = fault (none | freeze_obs | stop), $2 = log name
+start_embedder() {  # $1 = fault (none | freeze_obs | freeze_sensors | stop), $2 = log name
   setsid "$EMBEDDER" --ros-args \
     -p onnx_path:="$ONNX" -p stats_every_sec:=10.0 \
     -p fault:="$1" -p fault_after_sec:="$(printf '%.1f' "$FAULT_AT")" >"$OUT/$2" 2>&1 &
@@ -103,7 +133,7 @@ stop_embedder() {
   echo "onnx $(sha256sum "$ONNX" | cut -c1-16)"
   echo "CAL_SEC=$CAL_SEC NOM_SEC=$NOM_SEC FAULT_SEC=$FAULT_SEC FAULT_AT=$FAULT_AT"
   echo "WINDOW=$WINDOW PERCENTILE=$PERCENTILE MIN_CONSEC=$MIN_CONSEC ARB_STALENESS=$ARB_STALENESS"
-  echo "TRIALS=$TRIALS PHM_BACKEND=$PHM_BACKEND"
+  echo "TRIALS=$TRIALS PHM_BACKEND=$PHM_BACKEND FAULTS=$FAULTS"
   echo "phm $(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 } >"$OUT/session.txt"
 
@@ -153,10 +183,10 @@ T1="$(date +%s.%N)"
 top -b -n 1 -w 200 | head -25 >"$OUT/top_nominal.txt"
 stop_embedder
 
-# -- 3, 4 induced faults, TRIALS of each, interleaved --------------------------
+# -- 3, 4 induced faults, TRIALS of each, interleaved (kinds in FAULTS order) ---
 for trial in $(seq 1 "$TRIALS"); do
-  for fault in freeze stop; do
-    [ "$fault" = freeze ] && mode=freeze_obs || mode=stop
+  for fault in "${FAULT_KINDS[@]}"; do
+    mode="$(fault_mode "$fault")"
     start_embedder "$mode" "embedder_${fault}_${trial}.log"
     echo "$(date -u +%FT%T.%NZ) phase ${mode} trial ${trial} (fault at +${FAULT_AT}s)" \
       >>"$OUT/events.log"

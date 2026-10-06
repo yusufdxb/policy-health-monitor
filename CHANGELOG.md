@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semantic versioning.
 
+## [Unreleased]
+
+### Added
+- GO2 shadow integration: a third software-induced fault, `freeze_sensors`. The policy is
+  fed the sensor reading of the first faulted tick (observation terms 0 to 35) together
+  with its own live previous action (terms 36 to 47), so the latent need not become
+  constant, unlike `freeze_obs`. Available in the shadow node (`fault:=freeze_sensors`),
+  the offline replay (`--fault freeze_sensors`) and the session script (`FAULTS`
+  variable, kind `sensors`, default `freeze stop` unchanged). `phm_go2_summarize` emits
+  `fault_sensors` and `phm_go2_plot` writes `go2_sensors_fault.svg` only when such trials
+  exist. Not yet run on the robot.
+
 ## [0.2.0] - 2026-10-06
 
 ### Changed (0.2.0: C++ migration)

@@ -457,7 +457,7 @@ const std::vector<std::string> & fault_sources(const std::string & kind)
   static const std::vector<std::string> kStop = {
     "dead:/policy/embedding", "freq:/policy/embedding", "phm_ood_cpp"};
   static const std::vector<std::string> kNone;
-  if (kind == "freeze") {
+  if (kind == "freeze" || kind == "sensors") {
     return kFreeze;
   }
   if (kind == "stop") {
@@ -709,10 +709,16 @@ json::Value summarize_session(const std::string & dir)
     append_ood(n, ood_summary(nominal));
     summary.set("nominal", n);
   }
-  for (const char * kind : {"freeze", "stop"}) {
+  for (const char * kind : {"freeze", "stop", "sensors"}) {
+    const std::vector<std::string> logs = embedder_logs(dir, kind);
+    // freeze_sensors is optional: sessions without such trials keep their
+    // output unchanged.
+    if (logs.empty() && std::string(kind) == "sensors") {
+      continue;
+    }
     json::Value trials = json::Value::array();
     std::vector<FaultSummary> summaries;
-    for (const std::string & name : embedder_logs(dir, kind)) {
+    for (const std::string & name : logs) {
       const std::string n = trial_text(name);
       const int64_t number = parse_trial_number(n);
       const std::vector<Row> rows =

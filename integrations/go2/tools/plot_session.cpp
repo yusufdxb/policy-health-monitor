@@ -1,7 +1,8 @@
 // Copyright 2026 Yusuf Guenena. MIT License.
 // phm_go2_plot <session_dir> --out <dir>: render the README figures of an
 // onboard session as SVG and print the numbers they show. With fault trials it
-// writes go2_freeze_fault.svg and go2_stop_fault.svg; it always ends with
+// writes go2_freeze_fault.svg and go2_stop_fault.svg (plus go2_sensors_fault.svg
+// when freeze_sensors trials exist); it always ends with
 // go2_nominal.svg, except that a session without fault trials whose nominal
 // recording holds a stand-up burst gets go2_standup.svg instead. Every figure
 // number is computed from the recorded files.
@@ -220,7 +221,11 @@ Style threshold_style(double width, double thr)
   return s;
 }
 
-std::string freeze_figure(const std::vector<Trial> & trials, double thr, const std::string & out)
+// Spread-and-health figure of a freeze-style fault. kind is "freeze" (whole
+// observation frozen) or "sensors" (sensors frozen, last action live).
+std::string freeze_figure(
+  const std::vector<Trial> & trials, double thr, const std::string & out,
+  const std::string & kind = "freeze")
 {
   const std::size_t n = trials.size();
   constexpr double kXlo = -10.0;
@@ -263,7 +268,21 @@ std::string freeze_figure(const std::vector<Trial> & trials, double thr, const s
     txt += "\nmedian time to first non-OK " + fixed(*deg.median, 2) + " s (" +
       std::to_string(deg.hits) + "/" + count + ")";
   }
-  a1.set_title("Frozen policy input: latent spread collapses, PHM escalates to STOP");
+  if (kind == "sensors") {
+    // State only what the data shows: the title follows how many trials reached STOP.
+    std::string title = "Stale sensors, live last action: ";
+    if (n > 0 && stop.hits == static_cast<int64_t>(n)) {
+      title += "PHM escalates to STOP in all " + count + " trials";
+    } else if (stop.hits > 0) {
+      title += "PHM escalates to STOP in " + std::to_string(stop.hits) + " of " + count +
+        " trials";
+    } else {
+      title += "PHM does not reach STOP in any of " + count + " trials";
+    }
+    a1.set_title(title);
+  } else {
+    a1.set_title("Frozen policy input: latent spread collapses, PHM escalates to STOP");
+  }
   a1.text(0.01, 0.03, txt, "start", 10, true);
   a1.set_xlim(kXlo, kXhi);
   a1.set_ylim_low(lo * 0.6);
@@ -281,8 +300,8 @@ std::string freeze_figure(const std::vector<Trial> & trials, double thr, const s
   a2.set_xlabel("time relative to fault injection (s)");
   a2.set_ylabel("/phm/health");
   state_legend(a2);
-  fig.save((fs::path(out) / "go2_freeze_fault.svg").string());
-  return "freeze: n=" + count + " median_stop=" + repr_opt(stop.median) + " (" +
+  fig.save((fs::path(out) / ("go2_" + kind + "_fault.svg")).string());
+  return kind + ": n=" + count + " median_stop=" + repr_opt(stop.median) + " (" +
          std::to_string(stop.hits) + "/" + count + ") median_non_ok=" + repr_opt(deg.median) +
          " (" + std::to_string(deg.hits) + "/" + count + ") stop_source=" + stop.top_source;
 }
@@ -540,10 +559,14 @@ int run(const std::string & dir, const std::string & out)
   std::vector<std::string> lines;
   const std::vector<Trial> freeze = load_trials(dir, "freeze");
   const std::vector<Trial> stop = load_trials(dir, "stop");
-  const bool has_faults = !freeze.empty() || !stop.empty();
+  const std::vector<Trial> sensors = load_trials(dir, "sensors");
+  const bool has_faults = !freeze.empty() || !stop.empty() || !sensors.empty();
   if (has_faults) {
     lines.push_back(freeze_figure(freeze, thr, out));
     lines.push_back(stop_figure(stop, out));
+    if (!sensors.empty()) {
+      lines.push_back(freeze_figure(sensors, thr, out, "sensors"));
+    }
   }
   const Nominal nom = load_nominal(dir);
   // The burst swamps a nominal histogram, so the stand-up figure replaces it.

@@ -1042,3 +1042,43 @@ TEST(SessionTools, EmptySessionDirectoryGivesNullFractions)
   EXPECT_FALSE(s.has("session_txt"));
   EXPECT_FALSE(s.has("calibration"));
 }
+
+TEST(SessionTools, SensorsTrialsAreSummarizedOnlyWhenTheyExist)
+{
+  TempDir tmp;
+  const fs::path dir = tmp.path() / "session_fixture";
+  fs::create_directories(dir);
+  write_fixture(dir, false);
+  EXPECT_FALSE(phm_go2::summarize_session(dir.string()).has("fault_sensors"));
+
+  put_text(dir, "embedder_sensors_1.log", false,
+      "[INFO] [3979.5] [phoenix_shadow_embedder]: started\n"
+      "[WARN] [4000.000000000] [phoenix_shadow_embedder]: FAULT INJECTED: freeze_sensors "
+      "(policy sees stale sensors; its own last action stays live)\n");
+  put(dir, "fault_sensors_1.jsonl", false, {
+      E(3992.02, 3992.0, std::nullopt),
+      E(3993.02, 3993.0, 0.011),
+      E(3994.02, 3994.0, 0.012),
+      E(3995.02, 3995.0, 0.013),
+      E(3996.02, 3996.0, 0.014),
+      E(3997.02, 3997.0, 0.015),
+      V(4000.2, 4000.2, "dead:/policy/embedding", true, "not a sensors detection"),
+      V(4000.5, 4000.5, "phm_ood_cpp", true, "spread collapsed"),
+      H(4000.9, 4000.9, 3, "phm_ood_cpp", "stop"),
+    });
+  const json::Value s = phm_go2::summarize_session(dir.string());
+  ASSERT_TRUE(s.has("fault_sensors"));
+  const auto & trials = s.at("fault_sensors").at("trials").as_array();
+  ASSERT_EQ(trials.size(), 1u);
+  EXPECT_EQ(trials[0].at("trial").as_int(), 1);
+  EXPECT_DOUBLE_EQ(trials[0].at("fault_time").as_double(), 4000.0);
+  EXPECT_FALSE(trials[0].has("error"));
+  // Detection source is phm_ood_cpp only: the earlier dead-topic verdict is skipped.
+  const std::string verdict = json::dumps(trials[0].at("first_violating_verdict"));
+  EXPECT_NE(verdict.find("phm_ood_cpp"), std::string::npos) << verdict;
+  EXPECT_EQ(verdict.find("dead:"), std::string::npos) << verdict;
+  EXPECT_FALSE(trials[0].at("first_health_stop").is_null());
+  // The freeze and stop entries are unaffected by the extra trials.
+  EXPECT_EQ(s.at("fault_freeze").at("trials").as_array().size(), 3u);
+  EXPECT_EQ(phm_go2::fault_sources("sensors"), phm_go2::fault_sources("freeze"));
+}
