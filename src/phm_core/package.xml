@@ -2,20 +2,27 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>phm_core</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    Pure-Python detector logic for the Policy Health Monitor: Detector ABC,
-    hysteresis, calibration, and severity. No ROS dependency; the sibling rclpy
-    packages are thin wrappers over this logic.
+    ROS-independent C++ library for the Policy Health Monitor: detector
+    interface, hysteresis, severity bands, rolling-spread calibration and OOD
+    core (plain / Eigen / optional LibTorch kernels), health detectors, worst-wins
+    arbitration, recovery decision logic, synthetic streams, NumPy-compatible
+    random streams and .npy/.npz I/O. Builds with plain CMake as well as colcon.
   </description>
   <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
-  <exec_depend>python3-numpy</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <test_depend>python3-pytest</test_depend>
+  <depend>zlib</depend>
+  <build_depend>eigen</build_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

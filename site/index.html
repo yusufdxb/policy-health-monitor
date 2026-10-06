@@ -404,12 +404,12 @@
       <div class="ss green rise d2">
         <span class="badge">SIM-CERTIFIED</span>
         <h4>Core logic</h4>
-        <p>phm_core arbitration, hysteresis, severity, and the OOD detector are pure-Python and unit-tested without a ROS graph. Worst-wins fusion and staleness handling are locked by tests.</p>
+        <p>phm_core arbitration, hysteresis, severity, and the OOD detector are a ROS-independent C++ library, unit-tested without a ROS graph. Worst-wins fusion and staleness handling are locked by tests.</p>
       </div>
       <div class="ss blue rise d3">
         <span class="badge">INTEGRATION</span>
         <h4>ROS 2 nodes</h4>
-        <p>phm_ood, phm_detectors, phm_arbiter, and phm_recovery are thin rclpy wrappers over the tested core, exercised in a simulated graph (phm_sim).</p>
+        <p>phm_ood, phm_detectors, phm_arbiter, and phm_recovery are thin rclcpp nodes over the tested core, exercised on live ROS 2 graphs with synthetic input (phm_sim).</p>
       </div>
       <div class="ss amber rise d4">
         <span class="badge">PENDING HARDWARE</span>

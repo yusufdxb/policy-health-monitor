@@ -8,8 +8,10 @@
     window: 30
 
     # Pre-calibrated spread threshold. spread < threshold flags OOD.
-    # Run phm_core.calibration.calibrate_threshold on real in-distribution
-    # data to obtain this value, then set it here or via calibration_file.
+    # Obtain it from recorded in-distribution embeddings with
+    # phm_core::calibrate_threshold, or on a live graph with
+    # `phm_go2_probe calibrate` (which also writes a calibration_file .npz),
+    # then set it here or via calibration_file.
     # Default 0.0 means the detector fires only after calibration is loaded.
     threshold: 0.0
 
@@ -19,7 +21,7 @@
     calibration_file: ""
 
     # Consecutive violating frames required before the verdict flips to
-    # violating=True. Must be >= 1. Mirrors BlackBoxRS min_consecutive_samples=2.
+    # violating=true. Must be >= 1. Mirrors BlackBoxRS min_consecutive_samples=2.
     hysteresis_count: 3
 
     # Frequency gate: compute rolling spread every N frames.

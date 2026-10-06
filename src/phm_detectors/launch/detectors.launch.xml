@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!--
+  Start the phm_detectors node with config/detectors.yaml. It publishes
+  phm_msgs/DetectorVerdict on /phm/verdicts.
+
+    ros2 launch phm_detectors detectors.launch.xml
+-->
+<launch>
+  <node pkg="phm_detectors" exec="phm_detectors_node" name="phm_detectors" output="screen">
+    <param from="$(find-pkg-share phm_detectors)/config/detectors.yaml"/>
+  </node>
+</launch>

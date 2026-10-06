@@ -2,29 +2,31 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>phm_ood_cpp</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    C++ (rclcpp) rolling-spread OOD runtime node for the Policy Health Monitor.
-    Subscribes phm_msgs/PolicyEmbedding on /policy/embedding, maintains a rolling
-    window, computes the rolling spread (sum over dims of the windowed population
-    variance, the same math as phm_core.calibration.rolling_spread), applies a
-    calibrated threshold with consecutive-hysteresis, and publishes a
-    phm_msgs/DetectorVerdict on /phm/verdicts with source "phm_ood_cpp". The
-    rolling-spread kernel is behind a pluggable Backend interface (dependency-free
-    std::vector default, optional Eigen, optional LibTorch).
+    C++ (rclcpp) managed-lifecycle rolling-spread OOD node for the Policy Health
+    Monitor. Subscribes phm_msgs/PolicyEmbedding on /policy/embedding, scores the
+    rolling spread with the shared phm_core::OodCore (plain / Eigen / optional
+    LibTorch kernels), applies the calibrated threshold with consecutive
+    hysteresis, and publishes phm_msgs/DetectorVerdict on /phm/verdicts with
+    source "phm_ood_cpp". Also provides the lifecycle node library that phm_ood
+    runs, and the bench_latency micro-benchmark.
   </description>
   <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>phm_core</depend>
+  <depend>phm_msgs</depend>
+  <depend>rcl_interfaces</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
-  <depend>phm_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
-  <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>lifecycle_msgs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

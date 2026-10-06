@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>phm_go2</name>
+  <version>0.2.0</version>
+  <description>
+    Runs the Policy Health Monitor onboard a Unitree GO2 against a real learned
+    policy in shadow mode, without letting the policy or PHM command the robot:
+    a shadow-policy node that publishes the policy latent (ONNX Runtime C++), a
+    probe that calibrates PHM and records its output, a session runner that
+    injects software faults, and tools that reduce a session to numbers and
+    figures. The shadow node additionally needs ONNX Runtime (ONNXRUNTIME_ROOT)
+    and Unitree's unitree_go messages; without them it is skipped.
+  </description>
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>phm_core</depend>
+  <depend>phm_msgs</depend>
+  <depend>phm_tools</depend>
+  <depend>rclcpp</depend>
+
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>phm_arbiter</exec_depend>
+  <exec_depend>phm_detectors</exec_depend>
+  <exec_depend>phm_ood_cpp</exec_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

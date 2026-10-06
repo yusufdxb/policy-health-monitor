@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  Start the phm_ood OOD lifecycle node with config/phm_ood.yaml.
+
+  The node starts unconfigured; send configure then activate:
+    ros2 launch phm_ood phm_ood.launch.xml threshold:=0.019 window:=30
+    ros2 lifecycle set /phm_ood configure
+    ros2 lifecycle set /phm_ood activate
+
+  Arguments override the YAML defaults.
+-->
+<launch>
+  <arg name="embedding_topic" default="/policy/embedding" description="Topic name for PolicyEmbedding input."/>
+  <arg name="window" default="30" description="Rolling-spread window length (frames, int)."/>
+  <arg name="threshold" default="0.0" description="Pre-calibrated spread threshold (float)."/>
+  <arg name="calibration_file" default="" description="Path to an .npz calibration file (overrides threshold)."/>
+  <arg name="hysteresis_count" default="3" description="Consecutive violating frames before the verdict flips."/>
+  <arg name="compute_every" default="1" description="Compute the spread every N frames (frequency gate)."/>
+  <arg name="embed_dim" default="0" description="Expected embedding dim for validation. 0 = skip."/>
+
+  <node pkg="phm_ood" exec="phm_ood_node" name="phm_ood" namespace="" output="screen">
+    <param from="$(find-pkg-share phm_ood)/config/phm_ood.yaml"/>
+    <param name="embedding_topic" value="$(var embedding_topic)"/>
+    <param name="window" value="$(var window)"/>
+    <param name="threshold" value="$(var threshold)"/>
+    <param name="calibration_file" value="$(var calibration_file)" type="str"/>
+    <param name="hysteresis_count" value="$(var hysteresis_count)"/>
+    <param name="compute_every" value="$(var compute_every)"/>
+    <param name="embed_dim" value="$(var embed_dim)"/>
+  </node>
+</launch>

@@ -2,17 +2,23 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>phm_arbiter</name>
-  <version>0.1.0</version>
-  <description>PHM arbiter: fuses DetectorVerdict messages into a single PolicyHealthStatus on /phm/health.</description>
+  <version>0.2.0</version>
+  <description>PHM arbiter: fuses DetectorVerdict messages into a single PolicyHealthStatus on /phm/health (worst-wins, logic in phm_core).</description>
   <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
   <license>MIT</license>
 
-  <depend>rclpy</depend>
-  <depend>phm_msgs</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <test_depend>python3-pytest</test_depend>
+  <depend>phm_core</depend>
+  <depend>phm_msgs</depend>
+  <depend>rclcpp</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

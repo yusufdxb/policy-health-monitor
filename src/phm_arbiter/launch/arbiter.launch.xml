@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  Start the phm_arbiter node with config/phm_arbiter.yaml.
+
+    ros2 launch phm_arbiter arbiter.launch.xml
+    ros2 launch phm_arbiter arbiter.launch.xml staleness_sec:=2.0
+-->
+<launch>
+  <arg name="staleness_sec" default="1.0" description="Verdict staleness threshold in seconds."/>
+  <arg name="timer_period" default="0.05" description="Arbitration timer period in seconds (20 Hz default)."/>
+
+  <node pkg="phm_arbiter" exec="phm_arbiter" name="phm_arbiter" output="screen">
+    <param from="$(find-pkg-share phm_arbiter)/config/phm_arbiter.yaml"/>
+    <param name="staleness_sec" value="$(var staleness_sec)"/>
+    <param name="timer_period" value="$(var timer_period)"/>
+  </node>
+</launch>

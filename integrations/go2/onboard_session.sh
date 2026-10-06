@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# PHM onboard session on a Unitree GO2 Jetson. No actuation: phm_recovery is never
-# launched, and the shadow policy publishes only /policy/embedding.
+# PHM onboard session on a Unitree GO2's onboard computer. No actuation:
+# phm_recovery is never launched, and the shadow policy publishes only
+# /policy/embedding.
 #
 # Phases (evidence lands in $OUT):
 #   1 calibrate   CAL_SEC of live latent -> rolling-spread threshold (calib.npz)
@@ -8,15 +9,16 @@
 #   3 freeze_obs  TRIALS runs: policy fed a stale snapshot FAULT_AT s into FAULT_SEC
 #   4 stop        TRIALS runs: policy process goes silent FAULT_AT s into FAULT_SEC
 #
-# Every process starts in its own process group (setsid) and is stopped by group:
-# `ros2 run` forks the node, and signalling only the wrapper PID left nodes running.
+# Every process starts in its own process group (setsid) and is stopped by group.
+# Executables are run directly from the sourced colcon overlay (no `ros2 run`
+# wrapper process per node).
 #
 # Usage: onboard_session.sh <out_dir>     (env: see defaults below)
 set -euo pipefail
 
 OUT="${1:?usage: onboard_session.sh <out_dir>}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEPS="${PHM_GO2_DEPS:-$HOME/yusuf/phm_go2_deps}"
+DEPS="${PHM_GO2_DEPS:-$HOME/phm_go2_deps}"
 ONNX="${PHM_GO2_ONNX:-$DEPS/models/stand_v3_latent.onnx}"
 CAL_SEC="${CAL_SEC:-60}"
 NOM_SEC="${NOM_SEC:-120}"
@@ -27,7 +29,26 @@ WINDOW="${WINDOW:-30}"
 PERCENTILE="${PERCENTILE:-1.0}"
 MIN_CONSEC="${MIN_CONSEC:-3}"
 ARB_STALENESS="${ARB_STALENESS:-1.0}"
-export PHM_BACKEND="${PHM_BACKEND:-plain}"  # plain measured 2x faster than Eigen on the GO2
+export PHM_BACKEND="${PHM_BACKEND:-plain}"  # plain measured about 2x faster than eigen on the GO2
+
+# Path of an executable installed by a colcon package in the sourced overlay.
+find_exe() {  # $1 = package, $2 = executable
+  local prefix
+  IFS=: read -r -a prefixes <<<"${AMENT_PREFIX_PATH:-}"
+  for prefix in "${prefixes[@]}"; do
+    if [ -x "$prefix/lib/$1/$2" ]; then
+      echo "$prefix/lib/$1/$2"
+      return 0
+    fi
+  done
+  echo "missing $1/$2 in AMENT_PREFIX_PATH; source the PHM install overlay" >&2
+  return 1
+}
+EMBEDDER="$(find_exe phm_go2 phoenix_shadow_embedder)"
+PROBE="$(find_exe phm_go2 phm_go2_probe)"
+DETECTORS="$(find_exe phm_detectors phm_detectors_node)"
+ARBITER="$(find_exe phm_arbiter phm_arbiter)"
+OOD="$(find_exe phm_ood_cpp ood_node)"
 
 mkdir -p "$OUT"
 PIDS=()
@@ -45,8 +66,8 @@ cpu_seconds() {  # cumulative CPU seconds of every process in group $1
 trap cleanup EXIT
 
 start_embedder() {  # $1 = fault (none | freeze_obs | stop), $2 = log name
-  setsid python3 "$HERE/phoenix_shadow_embedder.py" --ros-args \
-    -p onnx_path:="$ONNX" -p phoenix_src:="$DEPS" -p stats_every_sec:=10.0 \
+  setsid "$EMBEDDER" --ros-args \
+    -p onnx_path:="$ONNX" -p stats_every_sec:=10.0 \
     -p fault:="$1" -p fault_after_sec:="$(printf '%.1f' "$FAULT_AT")" >"$OUT/$2" 2>&1 &
   EMB_PID=$!
   sleep 3
@@ -76,19 +97,20 @@ stop_embedder() {
 
 # -- 1 calibrate -----------------------------------------------------------
 start_embedder none embedder_calibrate.log
-python3 "$HERE/phm_go2_probe.py" calibrate --seconds "$CAL_SEC" --window "$WINDOW" \
+"$PROBE" calibrate --seconds "$CAL_SEC" --window "$WINDOW" \
   --percentile "$PERCENTILE" --out "$OUT/calib.npz" | tee "$OUT/calibrate.json"
-THR="$(python3 -c "import numpy as n; print(float(n.load('$OUT/calib.npz')['threshold']))")"
+THR="$(sed -n 's/.*"threshold": \([^,}]*\).*/\1/p' "$OUT/calibrate.json" | tail -n 1)"
+[ -n "$THR" ] || { echo "calibration failed; see $OUT/calibrate.json" >&2; exit 1; }
 echo "threshold $THR" >>"$OUT/session.txt"
 
 # -- PHM graph (stays up through phases 2-4) -------------------------------
-setsid ros2 run phm_detectors phm_detectors_node --ros-args \
+setsid "$DETECTORS" --ros-args \
   --params-file "$HERE/phm_go2_detectors.yaml" >"$OUT/detectors.log" 2>&1 &
 PIDS+=($!)
-setsid ros2 run phm_arbiter phm_arbiter --ros-args \
+setsid "$ARBITER" --ros-args \
   -p staleness_sec:="$ARB_STALENESS" >"$OUT/arbiter.log" 2>&1 &
 PIDS+=($!)
-setsid ros2 run phm_ood_cpp ood_node --ros-args -p threshold:="$THR" -p window:="$WINDOW" \
+setsid "$OOD" --ros-args -p threshold:="$THR" -p window:="$WINDOW" \
   -p min_consecutive:="$MIN_CONSEC" >"$OUT/ood_cpp.log" 2>&1 &
 PIDS+=($!)
 sleep 3
@@ -104,7 +126,7 @@ GROUPS_=("${PIDS[@]}" "$EMB_PID")
 declare -a CPU0
 for i in "${!GROUPS_[@]}"; do CPU0[$i]="$(cpu_seconds "${GROUPS_[$i]}")"; done
 T0="$(date +%s.%N)"
-python3 "$HERE/phm_go2_probe.py" record --seconds "$NOM_SEC" --window "$WINDOW" \
+"$PROBE" record --seconds "$NOM_SEC" --window "$WINDOW" \
   --out "$OUT/nominal.jsonl"
 T1="$(date +%s.%N)"
 {
@@ -126,7 +148,7 @@ for trial in $(seq 1 "$TRIALS"); do
     start_embedder "$mode" "embedder_${fault}_${trial}.log"
     echo "$(date -u +%FT%T.%NZ) phase ${mode} trial ${trial} (fault at +${FAULT_AT}s)" \
       >>"$OUT/events.log"
-    python3 "$HERE/phm_go2_probe.py" record --seconds "$FAULT_SEC" --window "$WINDOW" \
+    "$PROBE" record --seconds "$FAULT_SEC" --window "$WINDOW" \
       --out "$OUT/fault_${fault}_${trial}.jsonl"
     stop_embedder
   done

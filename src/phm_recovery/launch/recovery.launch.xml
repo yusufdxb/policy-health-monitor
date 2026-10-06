@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+  Start phm_recovery_node with config/recovery.yaml (recovery.enabled: false,
+  so it publishes nothing). Actuation needs an explicit config with
+  recovery.enabled: true:
+
+    ros2 launch phm_recovery recovery.launch.xml config_file:=/path/to/enabled.yaml
+-->
+<launch>
+  <arg name="config_file" default="$(find-pkg-share phm_recovery)/config/recovery.yaml"
+       description="Path to the recovery node YAML config."/>
+
+  <node pkg="phm_recovery" exec="recovery_node" name="phm_recovery_node" output="screen">
+    <param from="$(var config_file)"/>
+  </node>
+</launch>
