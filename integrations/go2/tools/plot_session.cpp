@@ -334,8 +334,9 @@ std::string stop_figure(const std::vector<Trial> & trials, const std::string & o
   ax.set_ylim(-0.2, 3.5);
   ax.set_xlim(xlo, xhi);
   ax.set_xlabel("time relative to fault injection (s)");
-  ax.set_ylabel("/phm/health state");
-  ax.set_title("Policy process goes silent: PHM state after the fault");
+  // No y label: the state tick labels name the axis, and a rotated label at the
+  // fixed offset would overlap the widest of them ("2 INTERVENE").
+  ax.set_title("Policy process goes silent: /phm/health state after the fault");
   ax.set_legend("center left");
   fig.save((fs::path(out) / "go2_stop_fault.svg").string());
   return "stop: n=" + count + " median_non_ok=" + repr_opt(non.median) + " (" +
@@ -390,15 +391,27 @@ std::string nominal_figure(const Nominal & nom, double thr, const std::string & 
   ax.set_xlim(lo - 0.05 * (hi - lo), hi + 0.05 * (hi - lo));
   ax.set_xlabel("rolling spread (30 frames), nominal phase");
   ax.set_ylabel("frames");
-  fig.text(
-    80, 46, "Nominal operation: spread stays above the collapse threshold", 13, kInk);
+  // A 1st-percentile threshold puts about 1% of nominal samples below it; the
+  // OOD node's hysteresis and severity floor decide whether a dip is a
+  // violation. The title states what the data shows, not a fixed claim.
+  const auto below = static_cast<int64_t>(
+    std::count_if(sp.begin(), sp.end(), [thr](double s) {return s < thr;}));
+  std::string title = "Nominal operation: spread stays above the collapse threshold";
+  if (nom.violating > 0) {
+    title = "Nominal operation: " + group(nom.violating) + " violating OOD verdicts";
+  } else if (below > 0) {
+    title = "Nominal operation: no violating OOD verdict";
+  }
+  fig.text(80, 46, title, 13, kInk);
   const double ok_ratio =
     static_cast<double>(nom.ok) / static_cast<double>(nom.health.health_msgs);
   ax.text(
     0, 1.02,
     group(nom.health.health_msgs) + " health messages, " + percent2(ok_ratio) + " OK; " +
     group(nom.ood) + " OOD verdicts, " + std::to_string(nom.violating) + " violating; " +
-    group(static_cast<int64_t>(sp.size())) + " spread samples, min " + fixed(*mm.first, 5),
+    group(static_cast<int64_t>(sp.size())) + " spread samples, min " + fixed(*mm.first, 5) +
+    ", " + group(below) + " below threshold (" +
+    percent2(static_cast<double>(below) / static_cast<double>(sp.size())) + ")",
     "start", 10, false, kMuted);
   ax.set_legend("upper right");
   fig.save((fs::path(out) / "go2_nominal.svg").string());

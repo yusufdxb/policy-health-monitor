@@ -64,6 +64,11 @@ All notable changes to this project are documented here. Format loosely follows
   1.0 s limit produced brief stale `DEGRADED` reports when the arbiter's timer lined up
   with the detectors' tick (seen in a desktop rehearsal: 4 of 1200 nominal health
   messages). `preflight.sh` checks the setup before a session.
+- `phm_go2_plot` titled the nominal figure "spread stays above the collapse threshold"
+  whatever the data showed. A 1st-percentile threshold leaves about 1% of nominal samples
+  below it (119 of 14,971 on the robot), filtered by the OOD node's hysteresis and severity
+  floor. The title now follows the data and the subtitle counts the samples below the
+  threshold. The stop-fault figure drops a y label that overlapped its tick labels.
 - `vla_monitor_demo/README.md` stated a +0.050 lead time on a 41-point alpha grid
   (monitor 0.325, output 0.375). Neither the Python demo nor its C++ port reproduces that:
   both give +0.025 (monitor 0.350, output 0.375). The README now says so; the 21-point

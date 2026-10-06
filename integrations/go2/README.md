@@ -44,8 +44,7 @@ The results of the session are in the top-level
 - `phm_recovery` is the only PHM package that acts on a `STOP`, and the session never
   launches it. A `STOP` on `/phm/health` changes nothing on the robot in this setup.
 - The script does not read or change the robot's mode. In the reported session the robot
-  stood still under its own controller (Unitree sport mode) with an operator holding the
-  remote.
+  stood still under its own controller (Unitree sport mode).
 
 ## Prerequisites on the robot's onboard computer
 
@@ -112,7 +111,7 @@ ros2 daemon stop          # drop discovery state cached from an earlier environm
 
 cd <policy-health-monitor>
 integrations/go2/preflight.sh
-PHM_GO2_DEPS=$HOME/phm_go2_deps NOM_SEC={{NOM_SEC}} TRIALS={{TRIALS}} \
+PHM_GO2_DEPS=$HOME/phm_go2_deps NOM_SEC=300 TRIALS=5 \
   integrations/go2/onboard_session.sh session_out
 ```
 
@@ -218,8 +217,7 @@ How the numbers are defined:
 
 ## Proof boundary
 
-- The robot stood still under its own controller (Unitree sport mode, operator holding
-  the remote). It did not walk.
+- The robot stood still under its own controller (Unitree sport mode). It did not walk.
 - The policy ran in shadow mode and never controlled the robot. Because its actions were
   never applied, it ran open loop on its own last-action term. On a standing-still robot
   the latent can vary only through small changes in the real sensor readings and through
@@ -243,9 +241,9 @@ How the numbers are defined:
   PHM stayed `OK` throughout (4,369 of 4,369 health messages, 0 of 10,922 OOD verdicts
   violating). The test is one-sided, so a burst of variance never raises it.
 - `phm_recovery` was never launched, so no recovery action was exercised on hardware.
-- The recorded session used the 0.1.x tools: the Python shadow node (onnxruntime Python
-  API), the Python probe, detectors and arbiter, and the original C++ OOD node. The C++
-  shadow node and probe described above have not run on the robot yet.
+- The reported session ran the 0.2.0 C++ executables described here (shadow node, probe,
+  detectors, arbiter and OOD node) at commit `54cc61a`. The stand-up observation above
+  comes from an earlier 0.1.x session.
 
 ## Parity
 
@@ -259,7 +257,11 @@ Python versions were removed:
   Runtime 1.23.2 through the C++ API on one side and the Python API on the other:
   observations, actions and latents bit-identical with no fault, with `freeze_obs` at
   tick 300, and with `stop` at tick 300 (300 outputs, then silence). The same held with
-  ONNX Runtime 1.28.0 on the C++ side. Not checked on the robot's architecture (aarch64).
+  ONNX Runtime 1.28.0 on the C++ side.
+- The same 600-tick replay on the robot's onboard computer (aarch64, ONNX Runtime 1.23.2)
+  against the desktop output, in all three modes: observation sensor terms bit-identical,
+  actions within 9.6e-7 and latents within 1.9e-6 (ONNX Runtime uses different CPU kernels
+  on ARM).
 - Session reduction: `phm_go2_summarize` output byte-identical to the Python summarizer
   on two recorded sessions and on a copy with gzipped files; `phm_go2_plot` prints the
   same summary lines as the Python plotter. The figures are SVG instead of PNG.
