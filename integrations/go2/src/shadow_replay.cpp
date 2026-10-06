@@ -3,12 +3,12 @@
 // synthetic /lowstate sequence and save every observation, action and latent.
 //
 //   phoenix_shadow_replay <model.onnx> <lowstate.npz> <out.npz>
-//                         [--fault none|freeze_obs|stop] [--fault-at TICK]
+//                         [--fault none|freeze_obs|freeze_sensors|stop] [--fault-at TICK]
 //
 // lowstate.npz holds float32 arrays q [T, 12], dq [T, 12], quat_wxyz [T, 4]
 // and gyro [T, 3] in Unitree motor order, one row per policy tick. The replay
 // uses the same ShadowStepper as the live node (last-action feedback, the
-// freeze_obs and stop faults), so its output is what the node would have
+// freeze_obs, freeze_sensors and stop faults), so its output is what the node would have
 // published for that input. out.npz holds obs [N, 48], action [N, 12],
 // latent [N, D] (float32) and tick [N] (int64, the input row of each output),
 // the inputs for a parity check against another implementation.
@@ -32,7 +32,7 @@ int main(int argc, char ** argv)
     std::fprintf(
       stderr,
       "usage: phoenix_shadow_replay <model.onnx> <lowstate.npz> <out.npz> "
-      "[--fault none|freeze_obs|stop] [--fault-at TICK]\n");
+      "[--fault none|freeze_obs|freeze_sensors|stop] [--fault-at TICK]\n");
     return 2;
   }
   try {

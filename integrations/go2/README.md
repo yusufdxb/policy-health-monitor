@@ -15,7 +15,7 @@ The results of the session are in the top-level
 
 | File | Role |
 |---|---|
-| `phoenix_shadow_embedder` (`src/shadow_embedder_node.cpp`) | Shadow policy node. Runs the latent ONNX with the ONNX Runtime C++ API on live `/lowstate` at 50 Hz, publishes `phm_msgs/PolicyEmbedding` on `/policy/embedding`. Optional `freeze_obs` or `stop` fault. |
+| `phoenix_shadow_embedder` (`src/shadow_embedder_node.cpp`) | Shadow policy node. Runs the latent ONNX with the ONNX Runtime C++ API on live `/lowstate` at 50 Hz, publishes `phm_msgs/PolicyEmbedding` on `/policy/embedding`. Optional `freeze_obs`, `freeze_sensors` or `stop` fault. |
 | `preflight.sh` | Read-only checks before a session: executables and libraries, model files, no stray or actuating processes, `/lowstate` rate, disk space. |
 | `onboard_session.sh` | Runs one session: calibrate, start PHM, nominal window, induced-fault trials, per-process CPU accounting. |
 | `phm_go2_probe` (`src/probe.cpp`) | `calibrate`: threshold from live latents. `record`: every `/phm/health`, `/phm/verdicts`, and embedding arrival to JSONL. Subscriber only. |
@@ -39,7 +39,8 @@ The results of the session are in the top-level
   observation, as the go2-phoenix deploy node feeds it. It is never published. Because
   it is never applied, the policy runs open loop on that term; the joint, IMU, and
   gravity terms are the robot's real state. The `freeze_obs` fault freezes the whole
-  observation, last-action term included; the `stop` fault stops inference and
+  observation, last-action term included; the `freeze_sensors` fault freezes only the
+  sensor terms and keeps the last-action term live; the `stop` fault stops inference and
   publication entirely.
 - `phm_recovery` is the only PHM package that acts on a `STOP`, and the session never
   launches it. A `STOP` on `/phm/health` changes nothing on the robot in this setup.
@@ -129,7 +130,8 @@ The session runs in four phases:
    and the C++ OOD node with the calibrated threshold, configures and activates the OOD
    node through its lifecycle, then waits 12 s so the rate checks learn their baselines.
 3. **Nominal.** Records `NOM_SEC` with no fault, plus the CPU time of each process group.
-4. **Faults.** `TRIALS` rounds, each one `freeze_obs` trial then one `stop` trial. Each
+4. **Faults.** `TRIALS` rounds, each one trial per kind in `FAULTS` (by default one
+   `freeze_obs` trial then one `stop` trial; `sensors` adds a `freeze_sensors` trial). Each
    trial restarts the shadow policy with the fault armed `FAULT_AT` seconds after it
    starts and records `FAULT_SEC`.
 
@@ -144,6 +146,7 @@ process per node; it still uses `ros2 lifecycle set` for the OOD node's transiti
 | `CAL_SEC` | 60 | calibration length, seconds |
 | `NOM_SEC` | 120 | nominal phase length, seconds |
 | `TRIALS` | 1 | trials per fault type |
+| `FAULTS` | `freeze stop` | fault kinds run in each trial round, in this order. Any of `freeze` (mode `freeze_obs`), `stop`, `sensors` (mode `freeze_sensors`, files `fault_sensors_<n>.jsonl` and `embedder_sensors_<n>.log`). An unknown or repeated kind is rejected before anything starts |
 | `FAULT_SEC` | 45 | recorded length of each fault trial, seconds |
 | `FAULT_AT` | 20 | seconds after the shadow policy starts that the fault is injected |
 | `WINDOW` | 30 | rolling-spread window, frames (0.6 s at 50 Hz) |
@@ -156,6 +159,11 @@ The faults, both injected inside the shadow node and both still without actuatio
 
 - `freeze_obs`: from the fault time on, the policy is fed the last observation it saw, as
   a policy wired to a stale sensor snapshot would be. The latent stops varying.
+- `freeze_sensors`: from the fault time on, the policy is fed the sensor reading of the first
+  faulted tick (observation terms 0 to 35) together with its own live previous action
+  (terms 36 to 47), which keeps changing. A stale sensor feeding a policy that still acts.
+  The latent need not become constant, so a spread-collapse detector may or may not fire.
+  Enabled with `FAULTS="freeze stop sensors"`.
 - `stop`: from the fault time on, the node stops publishing, as a crashed policy process
   would. `/policy/embedding` goes silent.
 
@@ -179,7 +187,8 @@ build/standalone/phm_go2/phm_go2_plot session_out --out docs/go2
 ```
 
 `phm_go2_plot` writes
-`go2_freeze_fault.svg`, `go2_stop_fault.svg`, and `go2_nominal.svg` to `--out` (for a
+`go2_freeze_fault.svg`, `go2_stop_fault.svg`, and `go2_nominal.svg` to `--out`, plus
+`go2_sensors_fault.svg` when `freeze_sensors` trials exist (for a
 session without fault trials whose nominal phase contains a stand-up burst, it writes
 `go2_standup.svg` instead), computing every number on a figure from the recorded files.
 Both tools read a session's `.jsonl` and `.log` files directly or from their `.gz` copies.
@@ -208,9 +217,9 @@ How the numbers are defined:
 | `calibrate.json` | calibration summary: frame count, rate, threshold, spread minimum, median, and maximum |
 | `calib.npz` | threshold, window, percentile, and the raw calibration latents (float32), so the threshold can be recomputed offline |
 | `nominal.jsonl` | every `/phm/health`, `/phm/verdicts`, and `/policy/embedding` arrival in the nominal phase; each embedding is stored as its stamp and rolling spread, not the vector |
-| `fault_freeze_<n>.jsonl`, `fault_stop_<n>.jsonl` | the same, one file per trial |
+| `fault_freeze_<n>.jsonl`, `fault_stop_<n>.jsonl`, `fault_sensors_<n>.jsonl` | the same, one file per trial (`sensors` only when `FAULTS` includes it) |
 | `embedder_calibrate.log` | shadow node log for the calibration and nominal phases, with ONNX Runtime p50 and p99 every 10 s |
-| `embedder_freeze_<n>.log`, `embedder_stop_<n>.log` | shadow node log per trial, including the `FAULT INJECTED` line that latencies are measured from |
+| `embedder_freeze_<n>.log`, `embedder_stop_<n>.log`, `embedder_sensors_<n>.log` | shadow node log per trial, including the `FAULT INJECTED` line that latencies are measured from |
 | `detectors.log`, `arbiter.log`, `ood_cpp.log` | PHM node logs |
 | `cpu_nominal.csv` | per process group: CPU seconds, wall seconds, and percent of one core over the nominal phase, plus `nproc` |
 | `top_nominal.txt` | one `top` snapshot at the end of the nominal phase |
@@ -228,7 +237,8 @@ How the numbers are defined:
 - Both faults were induced in software. `freeze_obs` holds the whole observation
   constant, including the last-action term, so the latent becomes exactly constant: the
   easiest case for a rolling-spread detector. A stale sensor feeding a policy whose
-  last-action term still changes was not tested. `stop` removes the embedding stream, so
+  last-action term still changes is the `freeze_sensors` fault; it has not run on the
+  robot yet. `stop` removes the embedding stream, so
   it tests liveness checks rather than the latent statistics.
 - This is not a real policy failure in the field, and it is not evidence that PHM warns
   before a behavioral failure.

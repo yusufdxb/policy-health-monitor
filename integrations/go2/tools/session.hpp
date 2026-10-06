@@ -128,7 +128,8 @@ struct FaultSummary
   HealthSummary after_health;
 };
 
-// Verdict sources that count as a detection for each injected fault kind.
+// Verdict sources that count as a detection for each injected fault kind
+// ("freeze", "stop", "sensors").
 const std::vector<std::string> & fault_sources(const std::string & kind);
 
 FaultSummary fault_summary(

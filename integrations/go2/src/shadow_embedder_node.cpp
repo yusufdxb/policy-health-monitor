@@ -15,9 +15,14 @@
 //   fault = "freeze_obs"  after fault_after_sec, keep feeding the last
 //                         observation, as a policy wired to a stale snapshot;
 //                         the latent stops varying
+//   fault = "freeze_sensors"
+//                         after fault_after_sec, keep feeding the last sensor
+//                         reading but assemble the last-action term live, as a
+//                         stale sensor feeding a policy that still acts; the
+//                         sensor terms of the observation stay constant
 //   fault = "stop"        after fault_after_sec, stop publishing, as a crashed
 //                         policy process; the embedding topic goes silent
-// Both log one "FAULT INJECTED" warning, the time detection latencies are
+// Each logs one "FAULT INJECTED" warning, the time detection latencies are
 // measured from.
 #include <chrono>
 #include <cstddef>
@@ -115,6 +120,11 @@ private:
     if (stepper_->fault_just_injected()) {
       if (stepper_->fault() == phm_go2::Fault::kStop) {
         RCLCPP_WARN(get_logger(), "FAULT INJECTED: stop (policy stops publishing)");
+      } else if (stepper_->fault() == phm_go2::Fault::kFreezeSensors) {
+        RCLCPP_WARN(
+          get_logger(),
+          "FAULT INJECTED: freeze_sensors (policy sees stale sensors; its own last action "
+          "stays live)");
       } else {
         RCLCPP_WARN(get_logger(), "FAULT INJECTED: freeze_obs (policy sees a stale snapshot)");
       }

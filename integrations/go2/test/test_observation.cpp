@@ -13,6 +13,8 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "phm_core/npy.hpp"
@@ -155,4 +157,120 @@ TEST(Stepper, StopPublishesNothingAfterTheFault)
   EXPECT_FALSE(st.fault_just_injected());
   EXPECT_EQ(p.runs, 1);
   EXPECT_THROW(phm_go2::parse_fault("explode"), std::invalid_argument);
+}
+
+namespace
+{
+// Deterministic policy whose action changes on every call (a function of the
+// call count only), so a live last-action term is visibly different each tick.
+class CountingPolicy : public phm_go2::Policy
+{
+public:
+  std::size_t latent_dim() const override {return kObsDim;}
+  void run(const float * obs) override
+  {
+    ++runs;
+    for (std::size_t k = 0; k < kObsDim; ++k) {
+      latent_[k] = obs[k];
+    }
+    for (std::size_t j = 0; j < kJoints; ++j) {
+      action_[j] = static_cast<float>(runs) + 0.01f * static_cast<float>(j);
+    }
+  }
+  const float * action() const override {return action_.data();}
+  const float * latent() const override {return latent_.data();}
+  int runs = 0;
+
+private:
+  std::array<float, kJoints> action_{};
+  std::array<float, kObsDim> latent_{};
+};
+}  // namespace
+
+TEST(Stepper, ParseFaultAcceptsAllFourNamesAndListsThemInTheError)
+{
+  EXPECT_EQ(phm_go2::parse_fault("none"), phm_go2::Fault::kNone);
+  EXPECT_EQ(phm_go2::parse_fault("freeze_obs"), phm_go2::Fault::kFreezeObs);
+  EXPECT_EQ(phm_go2::parse_fault("freeze_sensors"), phm_go2::Fault::kFreezeSensors);
+  EXPECT_EQ(phm_go2::parse_fault("stop"), phm_go2::Fault::kStop);
+  try {
+    phm_go2::parse_fault("freeze");
+    FAIL() << "expected std::invalid_argument";
+  } catch (const std::invalid_argument & e) {
+    const std::string msg = e.what();
+    for (const char * name : {"none", "freeze_obs", "freeze_sensors", "stop"}) {
+      EXPECT_NE(msg.find(std::string("'") + name + "'"), std::string::npos) << msg;
+    }
+  }
+}
+
+TEST(Stepper, FreezeSensorsKeepsSensorTermsAndFollowsTheLiveLastAction)
+{
+  CountingPolicy p;
+  phm_go2::ShadowStepper st(p, phm_go2::Fault::kFreezeSensors);
+  const auto a = reading(0.1f);
+  ASSERT_EQ(st.step(&a, false), phm_go2::StepOutcome::kPublished);
+  EXPECT_FALSE(st.fault_just_injected());
+  const auto b = reading(0.2f);
+  std::array<float, kJoints> prev_action = st.last_action();
+  ASSERT_EQ(st.step(&b, true), phm_go2::StepOutcome::kPublished);  // first faulted tick
+  EXPECT_TRUE(st.fault_just_injected());
+  std::array<float, kObsDim> expected_b{};
+  phm_go2::assemble_observation(b, prev_action, expected_b.data());
+  const std::array<float, kObsDim> faulted = st.obs();
+  EXPECT_EQ(faulted, expected_b);  // the faulted tick itself is a normal assembly
+  prev_action = st.last_action();
+  for (int i = 0; i < 4; ++i) {
+    const auto c = reading(0.3f + 0.1f * static_cast<float>(i));  // different live readings
+    ASSERT_EQ(st.step(&c, true), phm_go2::StepOutcome::kPublished);
+    EXPECT_FALSE(st.fault_just_injected());
+    for (std::size_t k = 0; k < 36; ++k) {
+      EXPECT_EQ(st.obs()[k], faulted[k]) << "sensor term " << k << " changed on tick " << i;
+    }
+    for (std::size_t j = 0; j < kJoints; ++j) {
+      EXPECT_EQ(st.obs()[36 + j], prev_action[j]) << "last_action term " << j;
+    }
+    // The last-action term really moves: the policy action differs every tick.
+    EXPECT_NE(st.last_action()[0], prev_action[0]);
+    prev_action = st.last_action();
+    // The latent is the observation here, so it carries the live last action too.
+    EXPECT_EQ(std::memcmp(st.latent(), st.obs().data(), sizeof(float) * kObsDim), 0);
+  }
+  // Consecutive faulted observations differ only in the last-action block.
+  const std::array<float, kObsDim> before = st.obs();
+  const auto d = reading(9.0f);
+  st.step(&d, true);
+  EXPECT_NE(st.obs(), before);
+  EXPECT_EQ(std::memcmp(st.obs().data(), before.data(), sizeof(float) * 36), 0);
+  EXPECT_NE(std::memcmp(st.obs().data() + 36, before.data() + 36, sizeof(float) * kJoints), 0);
+}
+
+TEST(Stepper, FreezeSensorsBehavesLikeNoFaultBeforeTheFault)
+{
+  CountingPolicy p_none;
+  CountingPolicy p_fs;
+  phm_go2::ShadowStepper none(p_none, phm_go2::Fault::kNone);
+  phm_go2::ShadowStepper fs(p_fs, phm_go2::Fault::kFreezeSensors);
+  for (int i = 0; i < 5; ++i) {
+    const auto r = reading(0.1f * static_cast<float>(i + 1));
+    ASSERT_EQ(none.step(&r, false), phm_go2::StepOutcome::kPublished);
+    ASSERT_EQ(fs.step(&r, false), phm_go2::StepOutcome::kPublished);
+    EXPECT_EQ(none.obs(), fs.obs());
+    EXPECT_FALSE(fs.fault_just_injected());
+  }
+}
+
+TEST(Stepper, FreezeObsStaysFullyConstantWithAChangingPolicyAction)
+{
+  CountingPolicy p;
+  phm_go2::ShadowStepper st(p, phm_go2::Fault::kFreezeObs);
+  const auto a = reading(0.1f);
+  st.step(&a, true);
+  const auto frozen = st.obs();
+  for (int i = 0; i < 4; ++i) {
+    const auto c = reading(0.5f + static_cast<float>(i));
+    st.step(&c, true);
+    EXPECT_EQ(st.obs(), frozen);
+  }
+  EXPECT_NE(st.last_action()[0], 0.0f);  // the action still changes; the observation does not
 }
