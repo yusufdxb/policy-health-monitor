@@ -58,7 +58,9 @@ add_executable(phm_go2_summarize tools/summarize_session.cpp)
 target_link_libraries(phm_go2_summarize phm_go2_session)
 add_executable(phm_go2_plot tools/plot_session.cpp)
 target_link_libraries(phm_go2_plot phm_go2_session)
-install(TARGETS phm_go2_summarize phm_go2_plot DESTINATION ${PHM_GO2_BIN})
+add_executable(phm_go2_ood_replay tools/ood_replay.cpp)
+target_link_libraries(phm_go2_ood_replay phm_core::phm_core)
+install(TARGETS phm_go2_summarize phm_go2_plot phm_go2_ood_replay DESTINATION ${PHM_GO2_BIN})
 
 # ---------------------------------------------------------------------------
 # ONNX Runtime layer
