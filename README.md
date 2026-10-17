@@ -190,6 +190,67 @@ The dead-topic adapters fired 2 s after startup in every earlier session, before
 discovery completed (2 to 3 s). `dead_startup_grace_sec` (5 s for the GO2) removed
 these alerts in both later sessions.
 
+### Phoenix model_2750 in control: stand and short walks, 2026-10-17
+
+The robot was driven by the Phoenix walking policy (model_2750, ONNX Runtime on the
+onboard computer, one `/lowcmd` writer, the sport controller released) through the
+Phoenix FREE_FLOOR harness. An operator held the remote as a deadman. Each run had the
+same sequence:
+
+- from lying down, a scripted 2 s joint-space ramp to the default stance (Kp 60, Kd 5);
+- the policy in control: 5 s of standing (drill), or about 4 s standing, a 0.3 m/s
+  forward command for 2 s, then a stop and about 4 s standing (walk);
+- a scripted sit.
+
+**The policy did not stand the robot up.** It was trained from resets near the default
+stance, so the stand-up is a scripted posture ramp (estimated body height 0.05 to 0.27 m,
+peak tilt 6.5 to 9.3 degrees), not a learned transition.
+
+PHM watched the executing policy's own latent. The policy node published its 384-D
+hidden layers to `/policy/embedding`, with live parity checks against a separate ONNX
+session. It used the fixed threshold from the 2026-10-06 stands, the stale-input check
+on `/lowstate` (`phm_go2_stale_monitor`) and the dead-topic and rate detectors.
+`phm_recovery` was not running. PHM was advisory only, and nothing it published reached
+the robot. The script is `phoenix_live_session.sh`. The tables cover five runs with both the
+policy log and the PHM bag: one drill and four walks. Later drills that only gated a
+walk are not included.
+
+| Item | Result |
+| --- | --- |
+| Policy runs | 1 drill (250 ticks at 50 Hz) and 4 walks (549 to 551 ticks); no fall, no abort during policy control, 0 action-limit or slew clips |
+| Distance (tape, 3 walks) | 34.0, 27.4 and 36.8 cm forward against 0.60 m commanded (46 to 61 percent); sideways -0.6, +4.4 and under 1.3 cm. The first measured walk was taken at the head, the other two at the rear feet. Heading was not measured. The earliest walk had no tape |
+| Latent stream | 2,444 of 2,450 published latents recorded (the 6 missing are the first 3 of two runs, before the recorder subscribed); every live parity check passed; offline replay from the logged observations matched the recorded latent within 1.2e-6 and the logged action within 4.8e-7 |
+| False alarms | 0 of 2,445 latent-detector verdicts and 0 of 2,451 stale-check verdicts violating while the policy was in control; arbitrated health `OK` throughout (standing, walking, after the stop) |
+| Latent spread, rolling, W=30 | standing before the walk min 0.0086 to 0.0097; walking min 0.0089 to 0.0163; after the stop min 0.0071 to 0.0083, with 5 to 66 frames below the threshold (0.00857) in each walk. None became a violation: the core reports one only when the score also reaches the `DEGRADED` band (spread under about 0.0064) |
+| Timing | Policy session p50 0.23 to 0.25 ms, p99 1.7 to 3.4 ms, max 16 ms; latent publish p50 0.41 to 0.44 ms. Control period p99 22 to 26 ms, 3 to 7 ticks over 25 ms per walk, max 47 ms |
+| PHM CPU, onboard | 14 to 16 percent of one core in total: recorder 3.9 to 4.7, detectors 4.1 to 4.8, stale check 3.3 to 3.9, arbiter 1.1 to 1.4, OOD node 0.7 to 0.9 |
+
+**Offline fault replay.** The faults were synthetic and applied to the recorded
+observations at the middle of each phase, never on the robot. The deployed detectors
+and limits were used, with no recalibration. Freeze faults ran the policy open loop on
+its own action. All five runs give 5 stand phases; the four walks give 4 walk and
+4 after-stop phases. The table shows first-violation latency in seconds.
+
+| Fault | Standing | Walking | After the stop |
+| --- | --- | --- | --- |
+| `freeze_obs` | latent 0.34 to 0.48, stale 0.12 | latent 0.62, stale 0.12 | latent 0.30 to 0.48, stale 0.12 |
+| `freeze_sensors` | latent 0.36 to 0.48, stale 0.12 | latent 0.68 to 1.94, stale 0.12 | latent 0.28 to 0.52, stale 0.12 |
+| `gyro_stuck` | latent 0.54 to 5.96, stale 0.12 | latent 2.40 to 3.48, stale 0.12 | latent 0.44 to 0.58, stale 0.12 |
+| `joint_stuck` (FL calf) | latent never, stale 0.26 | latent never, stale 0.26 | latent never, stale 0.26 |
+
+The healthy replay of the same runs gave 0 violations in every phase, so these latencies
+are not inherited alarms.
+
+What this does not show:
+
+- that the policy can stand up;
+- walking beyond 2 s at 0.3 m/s, turning, other speeds or terrain;
+- a measured body velocity (the onboard odometry was not available with the sport
+  controller released; the tape is the only displacement measure);
+- a real failure, or any fault on the robot while the policy was in control;
+- whether the after-stop margin holds on longer stands. The raw spread went below the
+  threshold in every walk, so the margin to the severity floor is small.
+
 ## Status and verified numbers
 
 | Item | Value |
@@ -201,7 +262,7 @@ these alerts in both later sessions.
 | Detector cost | Benchmark: 0.54 us per frame, fit and score amortised over the stream, median of 30 repeats (C++, [benchmark/RESULTS.md](benchmark/RESULTS.md)). Detector core per frame (`bench_latency`, D=384, W=30, plain backend, desktop x86-64): p50 3.9 to 4.0 us, p99 4.4 to 5.1 us over 3 runs; the pre-migration C++ core measured p50 7.4 us on the same machine. On the GO2's onboard computer: p50 14.7 to 14.8 us, p99 15.8 us over 3 runs, against p50 25.4 us for the pre-migration core |
 | End-to-end chain | Isolated localhost graph on a desktop x86-64 machine, synthetic 50 Hz embeddings, D=384, 500 Hz auxiliary topic, `scripts/measure_chain.sh`: embedding to OOD verdict p50 0.08 ms, p99 0.17 to 0.22 ms, 4850 of 4850 verdicts received (two runs); fault to `/phm/cmd_vel` zero velocity 0.48 to 0.49 s (mostly window refill and hysteresis); each C++ node 0.2% to 1.0% of one core and 24 to 28 MB RSS, against 1.7% to 6.4% and 58 to 63 MB for the Python nodes it replaced. The same isolated graph on the GO2's onboard computer (one run, 5 trials): embedding to OOD verdict p50 0.19 ms, p99 0.37 ms, 4850 of 4850 verdicts received; fault to `/phm/cmd_vel` zero velocity 0.47 s in 5 of 5 trials; each node 0.3% to 2.2% of one core and 10 to 13 MB peak RSS. That `/phm/cmd_vel` reached nothing; the recovery output has not been connected to the robot |
 | Data used | Benchmark: synthetic policy streams. On the robot: the 384-D latent of a trained GO2 locomotion policy in shadow mode on live `/lowstate`; the five-trial session used a standing robot, and the later single stale-sensor trial used live sensors under external operator control |
-| Hardware validation | Partial. Shadow-mode onboard build, CPU cost, nominal health output, time to software `STOP` for `freeze_obs`, `stop`, `freeze_sensors`, and, during scripted walking, `freeze_sensors`, `gyro_stuck` and `joint_stuck`; 352 s of scripted walking, turning and stopping with no alarm ([On a real robot](#on-a-real-robot)). Not done: a walking policy in control, a real (not induced) failure, physical recovery, early warning before a behavioral failure |
+| Hardware validation | Partial. Shadow-mode onboard build, CPU cost, nominal health output, time to software `STOP` for `freeze_obs`, `stop`, `freeze_sensors`, and, during scripted walking, `freeze_sensors`, `gyro_stuck` and `joint_stuck`; 352 s of scripted walking, turning and stopping with no alarm ([On a real robot](#on-a-real-robot)). With the Phoenix walking policy in control (advisory PHM on its own latent): 1 stand drill and 4 short forward walks with 0 false alarms, and synthetic faults replayed offline on those recordings. Not done: a policy-driven stand-up, longer or turning walks with a policy in control, a fault while the policy is in control, a real (not induced) failure, physical recovery, early warning before a behavioral failure |
 | Release | 0.2.0 (2026-10-06): the C++ runtime and the first onboard GO2 session; see [CHANGELOG.md](CHANGELOG.md) |
 
 ## Packages
@@ -374,14 +435,17 @@ bit for bit. The tests pin those behaviors with fixtures.
 
 The benchmark numbers come from synthetic policy streams. The on-robot numbers come from
 shadow-mode sessions on one GO2, standing and during scripted walking under the robot's
-own sport controller. The watched shadow policy never controlled the robot. Not yet
-verified:
+own sport controller, and from five short runs with the Phoenix walking policy in control
+(one stand, four 2 s forward walks at 0.3 m/s). Not yet verified:
 
-- a walking policy that actually controls the robot
+- a walking policy in control beyond those five runs: longer walks, turns, other speeds,
+  and a stand-up by the policy itself (the stand-up was a scripted ramp)
+- any fault on the robot while a policy is in control: the faults for the policy-in-control
+  runs were replayed offline
 - a real policy failure, rather than an induced one
 - whether PHM warns before a behavioral failure
-- the moving-to-still transition for the walking policy's own latent: with the stand-v3
-  shadow, 16 scripted stops raised no alarm, but that latent is not the controller's
+- the moving-to-still transition for the walking policy's own latent beyond four stops:
+  none raised an alarm, but the raw spread dipped below the threshold after every stop
 - stuck sensors that are not held exactly (drift, saturation, noise): the stale-input
   check does not cover them, and the latent detector misses them while the robot moves
 - the recovery layer acting on the robot: `phm_recovery` has run on the onboard computer only

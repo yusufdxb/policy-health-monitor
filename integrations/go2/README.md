@@ -23,6 +23,10 @@ The results of the session are in the top-level
 | `phm_go2_summarize` (`tools/summarize_session.cpp`) | Reduces a session directory to one JSON object. No ROS needed. |
 | `phm_go2_plot` (`tools/plot_session.cpp`) | Renders the README figures (SVG) from a session directory. No ROS needed. |
 | `phoenix_shadow_replay` (`src/shadow_replay.cpp`) | Runs the shadow policy offline on a recorded or synthetic `/lowstate` sequence (`.npz`) and saves every observation, action and latent, for parity checks. |
+| `phoenix_live_session.sh` | PHM around a Phoenix policy that is in control of the robot: the policy node publishes its own latent, and this script runs the detectors, the OOD node with a fixed threshold from earlier data, the stale-input check, the arbiter and a recorder of the light topics, until `<out_dir>/STOP` exists. No shadow policy. |
+| `phm_go2_stale_monitor` (`src/stale_monitor_node.cpp`) | The stale-input check on live `/lowstate` without a shadow policy; publishes `/phm/verdicts` (source `stale:/lowstate`). |
+| `phm_go2_phoenix_detectors.yaml` | `phm_detectors` parameters for `phoenix_live_session.sh`: the robot's sensor streams only (the sport service is released, the latent flows only while the policy has authority). |
+| `phm_go2_ood_replay`, `phm_go2_stale_replay` (`tools/`) | Run the deployed latent detector and stale-input check offline on arrays in an `.npz`, for labeled fault replay on recordings. No ROS needed. |
 
 ## Safety: nothing here commands the robot
 
@@ -49,6 +53,10 @@ The results of the session are in the top-level
   an external operator retained control. In the 2026-10-17 sessions the robot walked,
   turned and stopped under its own sport controller, driven by a separate scripted
   sport-API client outside this repository; PHM still published nothing that moves it.
+- `phoenix_live_session.sh` runs next to a policy that does command the robot (the
+  go2-phoenix harness, its own deadman and stop). The script starts no policy and no
+  `phm_recovery`; its nodes publish only `/phm/verdicts` and `/phm/health`, which the
+  policy does not read.
 
 ## Prerequisites on the robot's onboard computer
 
