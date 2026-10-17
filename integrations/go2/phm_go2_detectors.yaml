@@ -17,6 +17,15 @@
     threshold_temp_limit: 85.0
     threshold_min_consecutive: 2
     dead_timeout_sec: 2.0
+    # Every onboard session checked (2026-10-06, and five on 2026-10-17) logged
+    # dead-topic alerts on 2 to 5 topics exactly 2 s after startup. In the
+    # three 10-17 sessions analysed those alerts reached /phm/health as non-OK
+    # states (INTERVENE in one) while the topics were flowing (in that one,
+    # /lowstate has no recorded gap over 0.04 s): DDS discovery took 2 to 3 s
+    # before the first message arrived. The grace, inside the session's 12 s
+    # settle, holds back dead verdicts for topics not seen yet; a topic that
+    # never arrives is still dead after it.
+    dead_startup_grace_sec: 5.0
     dead_topics:
       - /lowstate
       - /sportmodestate

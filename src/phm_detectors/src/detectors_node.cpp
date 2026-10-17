@@ -59,7 +59,18 @@ DetectorsNode::DetectorsNode(const rclcpp::NodeOptions & options)
     "dead_topics", std::vector<std::string>{},
     describe("Topic names to monitor for dead-topic (string array)"));
 
+  // A topic not yet seen is not reported dead until this long after startup:
+  // the subscriptions need DDS discovery before the first message can arrive
+  // (2 to 3 s measured on the robot), and a dead verdict suggests STOP. A
+  // topic that never arrives is still dead once the grace ends, timed from
+  // startup. 0 keeps the original behavior.
+  dead_grace_ = declare_parameter<double>(
+    "dead_startup_grace_sec", 0.0,
+    describe("Before a watched topic's first message, no dead verdict for this long after "
+    "startup (sec)"));
+
   const double now = monotonic_now();
+  start_sec_ = now;
   // One adapter per distinct topic, kept in parameter order (first occurrence).
   for (const auto & t : dead_topics) {
     Watch & w = watches_[t];
@@ -186,6 +197,7 @@ void DetectorsNode::on_message(Watch & w)
   if (w.dead != nullptr) {
     w.dead->mark_alive(now);
     w.last_seen = now;
+    w.seen = true;
   }
   if (w.freq != nullptr) {
     if (!w.window_open) {
@@ -203,6 +215,9 @@ void DetectorsNode::tick()
 
   for (const auto & adapter : dead_) {
     const Watch & w = watches_.at(adapter->target_topic());
+    if (!w.seen && now - start_sec_ < dead_grace_) {
+      continue;  // still within the startup grace, nothing received yet
+    }
     if (auto v = adapter->update({w.topic, w.last_seen, now})) {
       publish(*v);
     }
