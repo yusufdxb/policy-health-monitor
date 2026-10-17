@@ -28,7 +28,7 @@ The results of the session are in the top-level
 
 | Process | Started by `onboard_session.sh` | Publishes (besides `/rosout` and `/parameter_events`) |
 |---|---|---|
-| `phoenix_shadow_embedder` | yes | `/policy/embedding` only |
+| `phoenix_shadow_embedder` | yes | `/policy/embedding`; with `STALE_CHECK=1` also `/phm/verdicts` (source `stale:/lowstate`) |
 | `phm_detectors_node` | yes | `/phm/verdicts` |
 | `phm_ood_cpp` `ood_node` | yes | `/phm/verdicts` |
 | `phm_arbiter` | yes | `/phm/health` |
@@ -44,8 +44,11 @@ The results of the session are in the top-level
   publication entirely.
 - `phm_recovery` is the only PHM package that acts on a `STOP`, and the session never
   launches it. A `STOP` on `/phm/health` changes nothing on the robot in this setup.
-- The script does not read or change the robot's mode. In the reported session the robot
-  stood still under its own controller (Unitree sport mode).
+- The script does not read or change the robot's mode. In the 2026-10-06 session the robot
+  stood still under its own controller (Unitree sport mode); in the later short session
+  an external operator retained control. In the 2026-10-17 sessions the robot walked,
+  turned and stopped under its own sport controller, driven by a separate scripted
+  sport-API client outside this repository; PHM still published nothing that moves it.
 
 ## Prerequisites on the robot's onboard computer
 
@@ -146,7 +149,8 @@ process per node; it still uses `ros2 lifecycle set` for the OOD node's transiti
 | `CAL_SEC` | 60 | calibration length, seconds |
 | `NOM_SEC` | 120 | nominal phase length, seconds |
 | `TRIALS` | 1 | trials per fault type |
-| `FAULTS` | `freeze stop` | fault kinds run in each trial round, in this order. Any of `freeze` (mode `freeze_obs`), `stop`, `sensors` (mode `freeze_sensors`, files `fault_sensors_<n>.jsonl` and `embedder_sensors_<n>.log`). An unknown or repeated kind is rejected before anything starts |
+| `FAULTS` | `freeze stop` | fault kinds run in each trial round, in this order. Any of `freeze` (mode `freeze_obs`), `stop`, `sensors` (mode `freeze_sensors`, files `fault_sensors_<n>.jsonl` and `embedder_sensors_<n>.log`), `gyro` (mode `gyro_stuck`), `joint` (mode `joint_stuck`). An unknown or repeated kind is rejected before anything starts |
+| `STALE_CHECK` | 0 | 1 runs the embedder's stale-input check (`stale_check`; limits `stale_gyro_max_repeats` 5, `stale_joint_max_repeats` 12 ticks) and publishes its verdicts. 0 keeps the original detector set |
 | `FAULT_SEC` | 45 | recorded length of each fault trial, seconds |
 | `FAULT_AT` | 20 | seconds after the shadow policy starts that the fault is injected |
 | `WINDOW` | 30 | rolling-spread window, frames (0.6 s at 50 Hz) |
@@ -155,7 +159,7 @@ process per node; it still uses `ros2 lifecycle set` for the OOD node's transiti
 | `ARB_STALENESS` | 1.5 | arbiter staleness limit, seconds. Must exceed the detectors node's 1 s verdict period: at 1.0 the arbiter can briefly report a verdict as stale (`DEGRADED`, reason `stale:...`) whenever its timer lines up with the detectors' tick, which the C++ nodes' near-simultaneous startup makes likely. The 0.1.x sessions used 1.0 |
 | `PHM_BACKEND` | `plain` | C++ rolling-spread backend; `plain` measured about 2x faster than `eigen` on the GO2 |
 
-The faults, both injected inside the shadow node and both still without actuation:
+The faults, all injected inside the shadow node without actuation:
 
 - `freeze_obs`: from the fault time on, the policy is fed the last observation it saw, as
   a policy wired to a stale sensor snapshot would be. The latent stops varying.
@@ -166,6 +170,9 @@ The faults, both injected inside the shadow node and both still without actuatio
   Enabled with `FAULTS="freeze stop sensors"`.
 - `stop`: from the fault time on, the node stops publishing, as a crashed policy process
   would. `/policy/embedding` goes silent.
+- `gyro_stuck`, `joint_stuck`: partial versions of `freeze_sensors`. From the fault time
+  on, only the gyroscope, or only q and dq of the front-left calf motor, keep the value
+  of the first faulted tick; every other term stays live. One stuck sensor channel.
 
 ## Reduce a session to numbers and figures
 
@@ -226,19 +233,25 @@ How the numbers are defined:
 
 ## Proof boundary
 
-- The robot stood still under its own controller (Unitree sport mode). It did not walk.
+- The five-trial 2026-10-06 session used a standing robot under its own controller
+  (Unitree sport mode). It did not walk. The 2026-10-09 follow-up used live sensor inputs
+  under external operator control; that PHM session did not quantify the robot's trajectory.
 - The policy ran in shadow mode and never controlled the robot. Because its actions were
   never applied, it ran open loop on its own last-action term. On a standing-still robot
   the latent can vary only through small changes in the real sensor readings and through
   that open-loop term, so the calibrated threshold describes this shadow setup, not a
   policy in control.
-- The threshold was calibrated, and the false-alarm rate measured, on the standing-still
-  state only.
-- Both faults were induced in software. `freeze_obs` holds the whole observation
+- The five-trial session's threshold and nominal alarm counts describe the standing-still
+  state. The follow-up separately calibrated 3,001 live shadow embeddings at 50.02 Hz,
+  then measured 60 seconds with all 1,200 health messages `OK` and no violating verdicts
+  among 3,000 OOD verdicts. Neither calibration establishes performance across motions.
+- All faults were induced in software. `freeze_obs` holds the whole observation
   constant, including the last-action term, so the latent becomes exactly constant: the
   easiest case for a rolling-spread detector. A stale sensor feeding a policy whose
-  last-action term still changes is the `freeze_sensors` fault; it has not run on the
-  robot yet. `stop` removes the embedding stream, so
+  last-action term still changes is the `freeze_sensors` fault. One live-sensor trial on
+  2026-10-09 reached a violating OOD verdict at 0.240 s, `DEGRADED` at 0.266 s,
+  `INTERVENE` at 0.416 s and software `STOP` at 0.566 s. One trial does not establish a
+  success rate. `stop` removes the embedding stream, so
   it tests liveness checks rather than the latent statistics.
 - This is not a real policy failure in the field, and it is not evidence that PHM warns
   before a behavioral failure.
@@ -251,9 +264,10 @@ How the numbers are defined:
   PHM stayed `OK` throughout (4,369 of 4,369 health messages, 0 of 10,922 OOD verdicts
   violating). The test is one-sided, so a burst of variance never raises it.
 - `phm_recovery` was never launched, so no recovery action was exercised on hardware.
-- The reported session ran the 0.2.0 C++ executables described here (shadow node, probe,
-  detectors, arbiter and OOD node) at commit `54cc61a`. The stand-up observation above
-  comes from an earlier 0.1.x session.
+- The five-trial session ran the 0.2.0 C++ executables described here (shadow node,
+  probe, detectors, arbiter and OOD node) at commit `54cc61a`. The single stale-sensor
+  trial used deployed source `017bc0f`. The stand-up observation above comes from an
+  earlier 0.1.x session.
 
 ## Parity
 
