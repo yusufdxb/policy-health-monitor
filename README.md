@@ -222,7 +222,7 @@ walk are not included.
 | Latent stream | 2,444 of 2,450 published latents recorded (the 6 missing are the first 3 of two runs, before the recorder subscribed); every live parity check passed; offline replay from the logged observations matched the recorded latent within 1.2e-6 and the logged action within 4.8e-7 |
 | False alarms | 0 of 2,445 latent-detector verdicts and 0 of 2,451 stale-check verdicts violating while the policy was in control; arbitrated health `OK` throughout (standing, walking, after the stop) |
 | Latent spread, rolling, W=30 | standing before the walk min 0.0086 to 0.0097; walking min 0.0089 to 0.0163; after the stop min 0.0071 to 0.0083, with 5 to 66 frames below the threshold (0.00857) in each walk. None became a violation: the core reports one only when the score also reaches the `DEGRADED` band (spread under about 0.0064) |
-| Timing | Policy session p50 0.23 to 0.25 ms, p99 1.7 to 3.4 ms, max 16 ms; latent publish p50 0.41 to 0.44 ms. Control period p99 22 to 26 ms, 3 to 7 ticks over 25 ms per walk, max 47 ms |
+| Timing | Policy session p50 0.23 to 0.25 ms, p99 1.7 to 3.4 ms, max 16 ms; latent publish p50 0.41 to 0.44 ms. Interval between logged ticks p99 22 to 26 ms, 3 to 7 over 25 ms per walk, max 47 ms. These are late ticks, not lost periods: the timer woke with p99 20.4 to 21.4 ms and a mean rate of 49.9 to 50.1 Hz, and no command sequence number was skipped. The delay is work inside a tick (median 2 ms, occasionally 8 to 33 ms) |
 | PHM CPU, onboard | 14 to 16 percent of one core in total: recorder 3.9 to 4.7, detectors 4.1 to 4.8, stale check 3.3 to 3.9, arbiter 1.1 to 1.4, OOD node 0.7 to 0.9 |
 
 **Offline fault replay.** The faults were synthetic and applied to the recorded
@@ -240,6 +240,27 @@ its own action. All five runs give 5 stand phases; the four walks give 4 walk an
 
 The healthy replay of the same runs gave 0 violations in every phase, so these latencies
 are not inherited alarms.
+
+**Faults that are not exact freezes** were replayed the same way: the raw readings were
+changed and the observation rebuilt with the robot's own builder. The detectors were not
+recalibrated, and the severities were fixed before any result. Each fault ran from the middle
+of every phase in all five runs, 13 episodes per severity and 312 in total. "Action change"
+is the largest change in the policy's output, in action units (scale 0.25 rad), within 1 s
+of the onset.
+
+| Fault (3 severities) | Latent detector | Stale-input check | Action change |
+| --- | --- | --- | --- |
+| Gyro bias drift, 0.1 to 2 rad/s per s | 0 of 39 | 0 of 39 | 0.04 to 1.26 |
+| FL calf encoder drift, 0.05 to 1 rad/s | 0 of 39 | 0 of 39 | 0.04 to 1.41 |
+| Gyro clipped at 0.05 to 0.5 rad/s, or FL calf dq clipped at 0.5 to 5 rad/s | 0 of 78 | 0 of 78 | 0 to 0.16 |
+| Gyro held with noise, sigma 0.005 to 0.1 rad/s | 2 of 39 (7.3 and 8.6 s) | 0 of 39 | 0.01 to 0.34 |
+| FL calf held with noise, sigma 0.0005 to 0.01 rad | 0 of 39 | 0 of 39 | 0.003 to 0.28 |
+| All sensors held for 3 / 8 / 15 of every 25 ticks | 0 / 4 / 11 of 13 | 0 / 13 / 13 of 13 (0.12 s) | 0.006 to 0.73 |
+| One-tick gyro spike of 1 to 20 rad/s every 25 ticks | 0 of 39 | 0 of 39 | 0.35 to 6.9 |
+
+Both detectors look for one thing: an input or a latent that stops changing. A sensor that
+drifts, saturates, spikes or stays noisy keeps the latent moving, so neither detector sees
+it, even when the policy's output moves by up to 6.9 action units (1.7 rad of joint target).
 
 What this does not show:
 
@@ -446,8 +467,10 @@ own sport controller, and from five short runs with the Phoenix walking policy i
 - whether PHM warns before a behavioral failure
 - the moving-to-still transition for the walking policy's own latent beyond four stops:
   none raised an alarm, but the raw spread dipped below the threshold after every stop
-- stuck sensors that are not held exactly (drift, saturation, noise): the stale-input
-  check does not cover them, and the latent detector misses them while the robot moves
+- sensor faults that are not exact freezes: in offline replay on the walking policy's own
+  runs, neither detector caught drift, clipping, noisy holds or spikes at any tested
+  severity, standing or walking (table above). This needs a different kind of check, for
+  example whether redundant readings agree
 - the recovery layer acting on the robot: `phm_recovery` has run on the onboard computer only
   in the isolated synthetic graph above, and its `/phm/cmd_vel` has never reached the robot
 - a second robot
