@@ -19,6 +19,8 @@
 #
 # Usage: phoenix_live_session.sh <out_dir>
 #   env: THRESHOLD (required) WINDOW MIN_CONSEC ARB_STALENESS DURATION_SEC CPU_EVERY_SEC BAG
+#        BAG_EXTRA (space-separated topics added to the recording, e.g. /utlidar/cloud for
+#        offline lidar odometry; heavy topics cost the shared computer CPU and disk)
 set -euo pipefail
 
 OUT="${1:?usage: phoenix_live_session.sh <out_dir>}"
@@ -32,8 +34,11 @@ CPU_EVERY_SEC="${CPU_EVERY_SEC:-5}"
 BAG="${BAG:-1}"
 # Light topics only: the recorder shares the computer with the control loop, and Phoenix
 # logs joint state, targets and modes at 500 Hz itself (bridge.jsonl, policy.parquet).
+# /utlidar/lidar_state (5 Hz) reports the lidar's own cloud rate, packet loss and error state.
 BAG_TOPICS=(/policy/embedding /phm/health /phm/verdicts /cmd_vel /phoenix/estop
-  /wirelesscontroller /utlidar/robot_odom /sportmodestate)
+  /wirelesscontroller /utlidar/robot_odom /sportmodestate /utlidar/lidar_state)
+read -r -a _bag_extra <<< "${BAG_EXTRA:-}"
+BAG_TOPICS+=("${_bag_extra[@]}")
 export PHM_BACKEND="${PHM_BACKEND:-plain}"
 
 find_exe() {  # $1 = package, $2 = executable
@@ -93,7 +98,7 @@ cpu_seconds() {  # cumulative CPU seconds (user + system) of process group $1, a
   echo "start $(date -u +%FT%TZ) host $(hostname)"
   echo "model $(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo unknown)"
   echo "THRESHOLD=$THR WINDOW=$WINDOW MIN_CONSEC=$MIN_CONSEC ARB_STALENESS=$ARB_STALENESS"
-  echo "DURATION_SEC=$DURATION_SEC BAG=$BAG PHM_BACKEND=$PHM_BACKEND"
+  echo "DURATION_SEC=$DURATION_SEC BAG=$BAG BAG_EXTRA=${BAG_EXTRA:-} PHM_BACKEND=$PHM_BACKEND"
   echo "phm $(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 } >"$OUT/session.txt"
 
