@@ -1,0 +1,25 @@
+# phm_detectors parameters for PHM watching the Phoenix policy that CONTROLS a Unitree
+# GO2 (phoenix_live_session.sh). The robot's sensor streams only: the sport service is
+# released for low-level control, so /sportmodestate is not watched, and /policy/embedding
+# flows only while Phoenix has authority, so it is not watched here either. A policy that
+# goes silent shows up instead as the OOD verdict source going stale in the arbiter
+# (DEGRADED, reason stale:phm_ood_cpp). Rates as in phm_go2_detectors.yaml.
+/**:
+  ros__parameters:
+    freq_topics:
+      - /lowstate
+      - /utlidar/imu
+      - /utlidar/cloud
+    freq_tolerance_percent: 20.0
+    freq_min_consecutive: 2
+    threshold_cpu_limit: 80.0
+    threshold_mem_limit: 85.0
+    threshold_temp_limit: 85.0
+    threshold_min_consecutive: 2
+    dead_timeout_sec: 2.0
+    # DDS discovery grace, as in phm_go2_detectors.yaml.
+    dead_startup_grace_sec: 5.0
+    dead_topics:
+      - /lowstate
+      - /utlidar/imu
+      - /utlidar/cloud
