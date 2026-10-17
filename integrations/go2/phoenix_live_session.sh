@@ -3,8 +3,10 @@
 #
 # Phoenix's policy node publishes the latent of its own forward pass on /policy/embedding
 # (go2-phoenix: --phm-embedding-topic, PHOENIX_PHM_EMBEDDING_TOPIC in its harness). This
-# script runs the passive PHM graph around it until SIGTERM or DURATION_SEC (stop it with
-# `kill -TERM -- -<pgid>`; SIGINT is ignored by the background sleep it waits on):
+# script runs the passive PHM graph around it until <out_dir>/STOP exists, DURATION_SEC
+# passes or a signal it can trap arrives. Stop it with `touch <out_dir>/STOP`: a launcher
+# (nohup, `&`, some tool shells) can start it with SIGINT/SIGTERM ignored, and bash cannot
+# trap a signal that was ignored when it started.
 #   phm_detectors          robot sensor streams (phm_go2_phoenix_detectors.yaml)
 #   phm_ood_cpp            rolling-spread collapse detector on /policy/embedding, with a
 #                          FIXED threshold (THRESHOLD, required): it must come from earlier
@@ -60,15 +62,18 @@ start() {  # $1 = name, rest = command; own process group, log in $OUT/<name>.lo
   NAMES+=("$name")
   PIDS+=($!)
 }
+stop_group() {  # $1 = pgid: INT, then TERM (the start may have left INT ignored), then KILL
+  local sig
+  for sig in INT TERM; do
+    kill -"$sig" -- "-$1" 2>/dev/null || return 0
+    for _ in $(seq 50); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.1; done
+  done
+  kill -KILL -- "-$1" 2>/dev/null || true
+}
 cleanup() {
-  # The recorder first, with time to write its metadata (killed early, the bag has none).
-  if [ "$BAG" = 1 ] && [ "${#PIDS[@]}" -gt 0 ]; then
-    kill -INT -- "-${PIDS[0]}" 2>/dev/null || true
-    for _ in $(seq 150); do kill -0 "${PIDS[0]}" 2>/dev/null || break; sleep 0.1; done
-  fi
-  for p in "${PIDS[@]}"; do kill -INT -- "-$p" 2>/dev/null || true; done
-  sleep 2
-  for p in "${PIDS[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; done
+  # The recorder first, so it writes its metadata before anything it records goes away.
+  local p
+  for p in "${PIDS[@]}"; do stop_group "$p"; done
   echo "$(date -u +%FT%T.%NZ) stop" >>"$OUT/events.log"
 }
 trap cleanup EXIT
@@ -100,8 +105,8 @@ start ood_cpp "$OOD" --ros-args -p threshold:="$THR" -p window:="$WINDOW" \
   -p min_consecutive:="$MIN_CONSEC"
 start stale_monitor "$STALE" --ros-args -p stats_every_sec:=10.0
 sleep 3
-ros2 lifecycle set /phm_ood_cpp configure >>"$OUT/events.log" 2>&1
-ros2 lifecycle set /phm_ood_cpp activate >>"$OUT/events.log" 2>&1
+ros2 lifecycle set --no-daemon /phm_ood_cpp configure >>"$OUT/events.log" 2>&1
+ros2 lifecycle set --no-daemon /phm_ood_cpp activate >>"$OUT/events.log" 2>&1
 for i in "${!PIDS[@]}"; do
   kill -0 "${PIDS[$i]}" 2>/dev/null || { echo "${NAMES[$i]} exited at startup; see $OUT/${NAMES[$i]}.log" >&2; exit 1; }
 done
@@ -117,6 +122,9 @@ while :; do
   if [ "$DURATION_SEC" != 0 ] && [ $(($(date +%s) - T0)) -ge "$DURATION_SEC" ]; then
     break
   fi
-  sleep "$CPU_EVERY_SEC" &
-  wait $! || true
+  for _ in $(seq "$CPU_EVERY_SEC"); do
+    [ -e "$OUT/STOP" ] && break 2
+    sleep 1
+  done
 done
+echo "$(date -u +%FT%T.%NZ) stop requested" >>"$OUT/events.log"
