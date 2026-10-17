@@ -30,9 +30,10 @@ ARB_STALENESS="${ARB_STALENESS:-1.5}"  # see onboard_session.sh
 DURATION_SEC="${DURATION_SEC:-0}"      # 0: until stopped
 CPU_EVERY_SEC="${CPU_EVERY_SEC:-5}"
 BAG="${BAG:-1}"
-BAG_TOPICS=(/policy/embedding /phm/health /phm/verdicts /lowstate /lowcmd /cmd_vel
-  /joint_group_position_controller/command /phoenix/estop /wirelesscontroller
-  /utlidar/robot_odom /sportmodestate)
+# Light topics only: the recorder shares the computer with the control loop, and Phoenix
+# logs joint state, targets and modes at 500 Hz itself (bridge.jsonl, policy.parquet).
+BAG_TOPICS=(/policy/embedding /phm/health /phm/verdicts /cmd_vel /phoenix/estop
+  /wirelesscontroller /utlidar/robot_odom /sportmodestate)
 export PHM_BACKEND="${PHM_BACKEND:-plain}"
 
 find_exe() {  # $1 = package, $2 = executable
