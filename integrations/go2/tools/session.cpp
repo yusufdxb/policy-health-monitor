@@ -456,9 +456,14 @@ const std::vector<std::string> & fault_sources(const std::string & kind)
   static const std::vector<std::string> kFreeze = {"phm_ood_cpp"};
   static const std::vector<std::string> kStop = {
     "dead:/policy/embedding", "freq:/policy/embedding", "phm_ood_cpp"};
+  // Partial sensor faults: the latent detector or the embedder's stale check.
+  static const std::vector<std::string> kPartial = {"phm_ood_cpp", "stale:/lowstate"};
   static const std::vector<std::string> kNone;
   if (kind == "freeze" || kind == "sensors") {
     return kFreeze;
+  }
+  if (kind == "gyro" || kind == "joint") {
+    return kPartial;
   }
   if (kind == "stop") {
     return kStop;
@@ -709,11 +714,11 @@ json::Value summarize_session(const std::string & dir)
     append_ood(n, ood_summary(nominal));
     summary.set("nominal", n);
   }
-  for (const char * kind : {"freeze", "stop", "sensors"}) {
+  for (const char * kind : {"freeze", "stop", "sensors", "gyro", "joint"}) {
     const std::vector<std::string> logs = embedder_logs(dir, kind);
-    // freeze_sensors is optional: sessions without such trials keep their
-    // output unchanged.
-    if (logs.empty() && std::string(kind) == "sensors") {
+    // The later fault kinds are optional: sessions without such trials keep
+    // their output unchanged.
+    if (logs.empty() && std::string(kind) != "freeze" && std::string(kind) != "stop") {
       continue;
     }
     json::Value trials = json::Value::array();
