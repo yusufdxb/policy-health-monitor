@@ -3,7 +3,8 @@
 #
 # Phoenix's policy node publishes the latent of its own forward pass on /policy/embedding
 # (go2-phoenix: --phm-embedding-topic, PHOENIX_PHM_EMBEDDING_TOPIC in its harness). This
-# script runs the passive PHM graph around it until SIGINT/SIGTERM or DURATION_SEC:
+# script runs the passive PHM graph around it until SIGTERM or DURATION_SEC (stop it with
+# `kill -TERM -- -<pgid>`; SIGINT is ignored by the background sleep it waits on):
 #   phm_detectors          robot sensor streams (phm_go2_phoenix_detectors.yaml)
 #   phm_ood_cpp            rolling-spread collapse detector on /policy/embedding, with a
 #                          FIXED threshold (THRESHOLD, required): it must come from earlier
