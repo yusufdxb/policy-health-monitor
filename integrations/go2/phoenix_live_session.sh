@@ -60,6 +60,11 @@ start() {  # $1 = name, rest = command; own process group, log in $OUT/<name>.lo
   PIDS+=($!)
 }
 cleanup() {
+  # The recorder first, with time to write its metadata (killed early, the bag has none).
+  if [ "$BAG" = 1 ] && [ "${#PIDS[@]}" -gt 0 ]; then
+    kill -INT -- "-${PIDS[0]}" 2>/dev/null || true
+    for _ in $(seq 150); do kill -0 "${PIDS[0]}" 2>/dev/null || break; sleep 0.1; done
+  fi
   for p in "${PIDS[@]}"; do kill -INT -- "-$p" 2>/dev/null || true; done
   sleep 2
   for p in "${PIDS[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; done
