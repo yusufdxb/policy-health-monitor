@@ -66,9 +66,15 @@ Fault parse_fault(const std::string & name)
   if (name == "stop") {
     return Fault::kStop;
   }
+  if (name == "gyro_stuck") {
+    return Fault::kGyroStuck;
+  }
+  if (name == "joint_stuck") {
+    return Fault::kJointStuck;
+  }
   throw std::invalid_argument(
-    "fault must be one of ('none', 'freeze_obs', 'freeze_sensors', 'stop'), got '" + name +
-    "'");
+    "fault must be one of ('none', 'freeze_obs', 'freeze_sensors', 'stop', 'gyro_stuck', "
+    "'joint_stuck'), got '" + name + "'");
 }
 
 ShadowStepper::ShadowStepper(Policy & policy, Fault fault)
@@ -90,16 +96,30 @@ StepOutcome ShadowStepper::step(const LowStateSample * latest, bool fault_active
     }
     return StepOutcome::kStopped;
   }
-  if (on && fault_ == Fault::kFreezeSensors) {
+  const bool held = fault_ == Fault::kFreezeSensors || fault_ == Fault::kGyroStuck ||
+    fault_ == Fault::kJointStuck;
+  if (on && held) {
     if (!frozen_) {
       frozen_sample_ = *latest;
       frozen_ = true;
       just_injected_ = true;
     }
-    // Stale sensors, live last action.
-    assemble_observation(frozen_sample_, last_action_, obs_.data());
+    // Stale sensors (all, or one group), live last action.
+    if (fault_ == Fault::kFreezeSensors) {
+      input_ = frozen_sample_;
+    } else {
+      input_ = *latest;
+      if (fault_ == Fault::kGyroStuck) {
+        input_.gyro = frozen_sample_.gyro;
+      } else {
+        input_.q[kStuckJointMotor] = frozen_sample_.q[kStuckJointMotor];
+        input_.dq[kStuckJointMotor] = frozen_sample_.dq[kStuckJointMotor];
+      }
+    }
+    assemble_observation(input_, last_action_, obs_.data());
   } else if (!(on && fault_ == Fault::kFreezeObs && frozen_)) {
-    assemble_observation(*latest, last_action_, obs_.data());
+    input_ = *latest;
+    assemble_observation(input_, last_action_, obs_.data());
     if (on && fault_ == Fault::kFreezeObs) {
       frozen_ = true;
       just_injected_ = true;

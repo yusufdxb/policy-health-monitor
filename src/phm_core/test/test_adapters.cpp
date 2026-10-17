@@ -3,7 +3,9 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "phm_core/adapters.hpp"
@@ -16,6 +18,9 @@ using phm_core::FrequencyDropAdapter;
 using phm_core::FrequencySample;
 using phm_core::RecurrentSpreadSample;
 using phm_core::RecurrentTemporalSpreadAdapter;
+using phm_core::StaleGroup;
+using phm_core::StaleSignalAdapter;
+using phm_core::StaleSignalSample;
 using phm_core::StaticThresholdAdapter;
 using phm_core::ThresholdSample;
 
@@ -261,4 +266,86 @@ TEST(RecurrentSpread, ScoreRangeAndDirection)
   EXPECT_FALSE(b.update(emb({10.0, 10.0}))->violating);
   b.update(emb({4.0, 4.0}));
   EXPECT_TRUE(b.update(emb({4.0, 4.0}))->violating);
+}
+
+namespace
+{
+
+constexpr char kObs[] = "/policy/obs";
+
+StaleSignalSample obs(std::vector<double> v) {return {kObs, std::move(v)};}
+
+// Channels 0-1 "imu" (limit 2), channel 2 "joint" (limit 4).
+StaleSignalAdapter imu_joint()
+{
+  return StaleSignalAdapter(kObs, {{"imu", {0, 1}, 2}, {"joint", {2}, 4}});
+}
+
+}  // namespace
+
+TEST(StaleSignal, NameTopicAndFirstSampleIsFresh)
+{
+  auto a = imu_joint();
+  EXPECT_EQ(a.name(), "stale:/policy/obs");
+  EXPECT_FALSE(a.update({"/other", {1.0, 2.0, 3.0}}).has_value());
+  const auto v = a.update(obs({1.0, 2.0, 3.0}));
+  ASSERT_TRUE(v.has_value());
+  EXPECT_FALSE(v->violating);
+  EXPECT_EQ(v->score, 0.0);
+  EXPECT_EQ(a.run(0), 0);
+}
+
+TEST(StaleSignal, RunMustExceedMaxRepeats)
+{
+  auto a = imu_joint();
+  a.update(obs({1.0, 2.0, 0.0}));
+  // imu repeats; joint keeps changing.
+  EXPECT_FALSE(a.update(obs({1.0, 2.0, 1.0}))->violating);   // run 1
+  EXPECT_FALSE(a.update(obs({1.0, 2.0, 2.0}))->violating);   // run 2 == limit
+  const auto fire = a.update(obs({1.0, 2.0, 3.0}));          // run 3 > 2
+  EXPECT_TRUE(fire->violating);
+  EXPECT_EQ(a.run(0), 3);
+  EXPECT_EQ(a.run(1), 0);
+  EXPECT_NE(fire->reason.find("imu unchanged for 3 samples (max 2)"), std::string::npos);
+  EXPECT_NEAR(fire->score, 0.75, 1e-12);
+  EXPECT_EQ(fire->suggested_action, phm_core::ACTION_HOLD);
+  EXPECT_EQ(a.update(obs({1.0, 2.0, 4.0}))->suggested_action, phm_core::ACTION_STOP_AND_HOLD);
+}
+
+TEST(StaleSignal, OneChangingChannelKeepsTheGroupFresh)
+{
+  auto a = imu_joint();
+  a.update(obs({1.0, 2.0, 0.0}));
+  for (int i = 1; i <= 10; ++i) {
+    // imu channel 0 frozen, channel 1 changing: the group is not stale.
+    const auto v = a.update(obs({1.0, 2.0 + i, static_cast<double>(i)}));
+    EXPECT_FALSE(v->violating);
+    EXPECT_EQ(a.run(0), 0);
+  }
+}
+
+TEST(StaleSignal, ReportsTheGroupClosestToItsLimitAndRecovers)
+{
+  auto a = imu_joint();
+  a.update(obs({1.0, 2.0, 5.0}));
+  for (int i = 0; i < 4; ++i) {
+    // joint frozen (run 1..4 of limit 4), imu changing.
+    EXPECT_FALSE(a.update(obs({1.0 + i, 2.0, 5.0}))->violating);
+  }
+  const auto fire = a.update(obs({9.0, 2.0, 5.0}));
+  EXPECT_TRUE(fire->violating);
+  EXPECT_NE(fire->reason.find("joint unchanged for 5 samples (max 4)"), std::string::npos);
+  const auto back = a.update(obs({10.0, 2.0, 6.0}));
+  EXPECT_FALSE(back->violating);
+  EXPECT_EQ(a.run(1), 0);
+  EXPECT_NE(back->reason.find("fresh"), std::string::npos);
+}
+
+TEST(StaleSignal, RejectsBadConfigurationAndShortSamples)
+{
+  EXPECT_THROW(StaleSignalAdapter(kObs, {}), std::invalid_argument);
+  EXPECT_THROW(StaleSignalAdapter(kObs, {{"g", {}, 2}}), std::invalid_argument);
+  EXPECT_THROW(StaleSignalAdapter(kObs, {{"g", {0}, 0}}), std::invalid_argument);
+  auto a = imu_joint();
+  EXPECT_THROW(a.update(obs({1.0, 2.0})), std::invalid_argument);
 }

@@ -3,9 +3,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "phm_core/calibration.hpp"
@@ -274,6 +276,83 @@ std::optional<VerdictData> RecurrentTemporalSpreadAdapter::update(
   } else {
     v.reason = "recurrent_temporal_spread:" + target_topic_ + " spread " + fmt::fixed(spread, 6) +
       " >= threshold " + fmt::fixed(threshold_, 6) + tail;
+  }
+  return v;
+}
+
+// ---------------------------------------------------------------------------
+// StaleSignalAdapter
+// ---------------------------------------------------------------------------
+StaleSignalAdapter::StaleSignalAdapter(
+  const std::string & target_topic, std::vector<StaleGroup> groups)
+: Detector("stale:" + target_topic, target_topic), groups_(std::move(groups)),
+  runs_(groups_.size(), 0)
+{
+  if (groups_.empty()) {
+    throw std::invalid_argument("StaleSignalAdapter needs at least one group");
+  }
+  for (const auto & g : groups_) {
+    if (g.channels.empty() || g.max_repeats < 1) {
+      throw std::invalid_argument(
+              "StaleSignalAdapter group '" + g.name + "' needs channels and max_repeats >= 1");
+    }
+  }
+}
+
+std::optional<VerdictData> StaleSignalAdapter::update(const StaleSignalSample & sample)
+{
+  if (sample.topic != target_topic_) {
+    return std::nullopt;
+  }
+  const auto & x = sample.values;
+  for (const auto & g : groups_) {
+    for (std::size_t c : g.channels) {
+      if (c >= x.size()) {
+        throw std::invalid_argument(
+                "StaleSignalAdapter group '" + g.name + "' channel " + std::to_string(c) +
+                " outside a sample of " + std::to_string(x.size()));
+      }
+    }
+  }
+  std::size_t worst = 0;
+  for (std::size_t i = 0; i < groups_.size(); ++i) {
+    bool stale = has_prev_;
+    for (std::size_t c : groups_[i].channels) {
+      stale = stale && x[c] == prev_[c];
+    }
+    runs_[i] = stale ? runs_[i] + 1 : 0;
+    // Highest run relative to its limit; cross-multiplied to stay in integers.
+    if (static_cast<int64_t>(runs_[i]) * groups_[worst].max_repeats >
+      static_cast<int64_t>(runs_[worst]) * groups_[i].max_repeats)
+    {
+      worst = i;
+    }
+  }
+  prev_ = x;
+  has_prev_ = true;
+
+  const StaleGroup & g = groups_[worst];
+  const int run = runs_[worst];
+  const bool violating = run > g.max_repeats;
+  const double score = normalize(static_cast<double>(run), 0.0, 2.0 * g.max_repeats);
+  const Severity sev = classify(score);
+
+  VerdictData v;
+  v.source = name_;
+  v.score = score;
+  v.violating = violating;
+  v.suggested_action = sev.suggested_action;
+  const std::string tail = std::to_string(run) + " samples (max " +
+    std::to_string(g.max_repeats) + ")";
+  if (violating) {
+    v.reason = "stale:" + target_topic_ + " " + g.name + " unchanged for " + tail;
+    if (has_logger() && run == g.max_repeats + 1) {
+      log(LogLevel::kWarn, "StaleSignalAdapter " + target_topic_ + ": " + g.name +
+        " unchanged for " + tail);
+    }
+  } else {
+    v.reason = "stale:" + target_topic_ + " fresh (worst " + g.name + " unchanged for " + tail +
+      ")";
   }
   return v;
 }

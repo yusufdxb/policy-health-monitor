@@ -187,18 +187,22 @@ private:
 };
 }  // namespace
 
-TEST(Stepper, ParseFaultAcceptsAllFourNamesAndListsThemInTheError)
+TEST(Stepper, ParseFaultAcceptsAllNamesAndListsThemInTheError)
 {
   EXPECT_EQ(phm_go2::parse_fault("none"), phm_go2::Fault::kNone);
   EXPECT_EQ(phm_go2::parse_fault("freeze_obs"), phm_go2::Fault::kFreezeObs);
   EXPECT_EQ(phm_go2::parse_fault("freeze_sensors"), phm_go2::Fault::kFreezeSensors);
   EXPECT_EQ(phm_go2::parse_fault("stop"), phm_go2::Fault::kStop);
+  EXPECT_EQ(phm_go2::parse_fault("gyro_stuck"), phm_go2::Fault::kGyroStuck);
+  EXPECT_EQ(phm_go2::parse_fault("joint_stuck"), phm_go2::Fault::kJointStuck);
   try {
     phm_go2::parse_fault("freeze");
     FAIL() << "expected std::invalid_argument";
   } catch (const std::invalid_argument & e) {
     const std::string msg = e.what();
-    for (const char * name : {"none", "freeze_obs", "freeze_sensors", "stop"}) {
+    for (const char * name :
+      {"none", "freeze_obs", "freeze_sensors", "stop", "gyro_stuck", "joint_stuck"})
+    {
       EXPECT_NE(msg.find(std::string("'") + name + "'"), std::string::npos) << msg;
     }
   }
@@ -273,4 +277,39 @@ TEST(Stepper, FreezeObsStaysFullyConstantWithAChangingPolicyAction)
     EXPECT_EQ(st.obs(), frozen);
   }
   EXPECT_NE(st.last_action()[0], 0.0f);  // the action still changes; the observation does not
+}
+
+TEST(Stepper, PartialFaultsHoldOnlyTheirGroup)
+{
+  for (const auto fault : {phm_go2::Fault::kGyroStuck, phm_go2::Fault::kJointStuck}) {
+    CountingPolicy p;
+    phm_go2::ShadowStepper st(p, fault);
+    const auto a = reading(0.1f);
+    st.step(&a, true);  // first faulted tick: the held values come from a
+    EXPECT_TRUE(st.fault_just_injected());
+    for (int i = 0; i < 3; ++i) {
+      const auto c = reading(0.5f + 0.1f * static_cast<float>(i));
+      ASSERT_EQ(st.step(&c, true), phm_go2::StepOutcome::kPublished);
+      const auto & in = st.input();
+      const constexpr std::size_t m = phm_go2::kStuckJointMotor;
+      if (fault == phm_go2::Fault::kGyroStuck) {
+        EXPECT_EQ(in.gyro, a.gyro);
+        EXPECT_EQ(in.q, c.q);
+        EXPECT_EQ(in.dq, c.dq);
+      } else {
+        EXPECT_EQ(in.gyro, c.gyro);
+        EXPECT_EQ(in.q[m], a.q[m]);
+        EXPECT_EQ(in.dq[m], a.dq[m]);
+        EXPECT_EQ(in.q[m - 1], c.q[m - 1]);
+        EXPECT_EQ(in.dq[m + 1], c.dq[m + 1]);
+      }
+      EXPECT_EQ(in.quat_wxyz, c.quat_wxyz);
+      std::array<float, kObsDim> expected{};
+      phm_go2::assemble_observation(in, st.last_action(), expected.data());
+      // obs was assembled from input() and the previous action.
+      for (std::size_t k = 0; k < 36; ++k) {
+        EXPECT_EQ(st.obs()[k], expected[k]) << k;
+      }
+    }
+  }
 }

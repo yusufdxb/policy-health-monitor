@@ -31,6 +31,8 @@ namespace phm_go2
 
 constexpr std::size_t kJoints = 12;
 constexpr std::size_t kObsDim = 48;
+// Unitree motor held by the joint_stuck fault: FL calf.
+constexpr std::size_t kStuckJointMotor = 5;
 
 // Unitree motor index (lowstate motor_state[0..11]: FR, FL, RR, RL legs, each
 // hip / thigh / calf) of each joint in policy order (FL, FR, RL, RR hips, then
@@ -92,8 +94,9 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-enum class Fault { kNone, kFreezeObs, kFreezeSensors, kStop };
-// "none" | "freeze_obs" | "freeze_sensors" | "stop"; throws std::invalid_argument otherwise.
+enum class Fault { kNone, kFreezeObs, kFreezeSensors, kStop, kGyroStuck, kJointStuck };
+// "none" | "freeze_obs" | "freeze_sensors" | "stop" | "gyro_stuck" | "joint_stuck";
+// throws std::invalid_argument otherwise.
 Fault parse_fault(const std::string & name);
 
 enum class StepOutcome
@@ -114,8 +117,14 @@ enum class StepOutcome
 //     reading plus the live last_action (the policy's own previous action),
 //     runs the policy and updates last_action. The sensor terms obs[0..36)
 //     stay constant while obs[36..48) keep following the policy's own actions.
+//   - gyro_stuck / joint_stuck: partial versions of freeze_sensors. From the
+//     first faulted tick the gyroscope (gyro_stuck), or q and dq of motor
+//     kStuckJointMotor (joint_stuck), keep the value of the reading taken at
+//     the fault; every other term stays live.
 //   - otherwise the observation is assembled from the latest reading, and the
 //     action becomes the next tick's last_action.
+// input() is the reading the latest observation was assembled from, faults
+// applied (for freeze_obs, the reading taken at the fault).
 class ShadowStepper
 {
 public:
@@ -127,6 +136,7 @@ public:
   // True exactly once, on the tick the fault first took effect.
   bool fault_just_injected() const {return just_injected_;}
   const std::array<float, kObsDim> & obs() const {return obs_;}
+  const LowStateSample & input() const {return input_;}
   const std::array<float, kJoints> & last_action() const {return last_action_;}
   const float * latent() const {return runner_.latent();}
   std::size_t latent_dim() const {return runner_.latent_dim();}
@@ -137,7 +147,8 @@ private:
   Fault fault_;
   std::array<float, kObsDim> obs_{};
   std::array<float, kJoints> last_action_{};
-  LowStateSample frozen_sample_{};  // freeze_sensors: the reading kept at the fault
+  LowStateSample frozen_sample_{};  // the reading kept at the fault
+  LowStateSample input_{};
   bool frozen_ = false;
   bool fault_logged_ = false;
   bool just_injected_ = false;
