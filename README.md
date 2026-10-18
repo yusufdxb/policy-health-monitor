@@ -3,8 +3,9 @@
 **A runtime watchdog for learned robot policies: it reads the policy's own internal
 embeddings and raises `OK`, `DEGRADED`, `INTERVENE`, or `STOP` (each with a
 human-readable reason and a recommended action) when the policy's internal state freezes
-or collapses.** It is for engineers running a learned controller on a robot who need a
-supervisor that can hand control to a safe fallback in time.
+or collapses.** It is for engineers running a learned controller on a robot who need an
+early health signal for it. On the robot PHM is advisory so far: its verdicts have not yet
+been connected to anything that takes control away from the policy.
 
 ## What problem this solves
 
@@ -57,6 +58,13 @@ and spreads are bit-identical to the NumPy implementation this C++ replaced.
 
 ## On a real robot
 
+Four kinds of session, newest last: the first onboard session in shadow mode on a standing
+robot (2026-10-06, below), a live-sensor stale-input check (2026-10-09), shadow mode on a
+robot walking under its own controller (2026-10-17), and the Phoenix walking policy in
+control of the robot with PHM advisory on its own latent (2026-10-17).
+
+### First onboard session, shadow mode, standing robot, 2026-10-06
+
 PHM has run on the onboard computer of a Unitree GO2 (aarch64, ROS 2 Humble), with all
 10 packages of the 0.2.0 C++ tree built there with `colcon`. The watched policy was the
 [go2-phoenix](https://github.com/yusufdxb/go2-phoenix) stand-v3 locomotion policy in
@@ -93,7 +101,7 @@ silent OOD source stale, so its time follows the arbiter's 1.5 s staleness limit
 
 ![Histogram of the rolling spread over the nominal phase, with the calibrated threshold](docs/go2/go2_nominal.svg)
 
-**What this run does not show.** The robot stood still; it did not walk. The policy ran in
+**What the 2026-10-06 run does not show.** The robot stood still; it did not walk. The policy ran in
 shadow mode and never controlled the robot, and nothing in the session published a
 command (`phm_recovery` was not launched). The threshold was calibrated, and the
 false-alarm rate measured, on that standing-still state only. Both faults were induced in
@@ -103,7 +111,9 @@ this detector. `stop` removes the embedding stream, so it exercises liveness che
 than the latent statistics. This is not a real policy failing in the field, and it is not
 evidence that PHM warns before a behavioral failure. One gap is known and open: a
 rolling-spread collapse detector calibrated on a still robot can confuse "the robot is
-still" with "the policy collapsed" when the robot goes from moving to still. The opposite
+still" with "the policy collapsed" when the robot goes from moving to still (later tested
+on 2026-10-17: no alarm after 16 stops in shadow mode or 4 stops with the policy in control,
+with a thin margin after the stops; see below). The opposite
 change was seen once, in an earlier 0.1.x session calibrated with the robot lying down:
 when the operator stood the robot up with the remote, the rolling spread peaked at about
 80,000 times its lying-down median, then settled about 1.6 times higher while standing.
@@ -282,7 +292,7 @@ What this does not show:
 | Benchmark: shift failure | PHM AUROC 1.000, and Mahalanobis, Relative Mahalanobis, unnormalized KNN and both RND forms also 1.000 |
 | Detector cost | Benchmark: 0.54 us per frame, fit and score amortised over the stream, median of 30 repeats (C++, [benchmark/RESULTS.md](benchmark/RESULTS.md)). Detector core per frame (`bench_latency`, D=384, W=30, plain backend, desktop x86-64): p50 3.9 to 4.0 us, p99 4.4 to 5.1 us over 3 runs; the pre-migration C++ core measured p50 7.4 us on the same machine. On the GO2's onboard computer: p50 14.7 to 14.8 us, p99 15.8 us over 3 runs, against p50 25.4 us for the pre-migration core |
 | End-to-end chain | Isolated localhost graph on a desktop x86-64 machine, synthetic 50 Hz embeddings, D=384, 500 Hz auxiliary topic, `scripts/measure_chain.sh`: embedding to OOD verdict p50 0.08 ms, p99 0.17 to 0.22 ms, 4850 of 4850 verdicts received (two runs); fault to `/phm/cmd_vel` zero velocity 0.48 to 0.49 s (mostly window refill and hysteresis); each C++ node 0.2% to 1.0% of one core and 24 to 28 MB RSS, against 1.7% to 6.4% and 58 to 63 MB for the Python nodes it replaced. The same isolated graph on the GO2's onboard computer (one run, 5 trials): embedding to OOD verdict p50 0.19 ms, p99 0.37 ms, 4850 of 4850 verdicts received; fault to `/phm/cmd_vel` zero velocity 0.47 s in 5 of 5 trials; each node 0.3% to 2.2% of one core and 10 to 13 MB peak RSS. That `/phm/cmd_vel` reached nothing; the recovery output has not been connected to the robot |
-| Data used | Benchmark: synthetic policy streams. On the robot: the 384-D latent of a trained GO2 locomotion policy in shadow mode on live `/lowstate`; the five-trial session used a standing robot, and the later single stale-sensor trial used live sensors under external operator control |
+| Data used | Benchmark: synthetic policy streams. On the robot, shadow mode: the 384-D latent of the go2-phoenix stand-v3 policy on live `/lowstate`, with the robot standing (2026-10-06), under external operator control (2026-10-09), and walking under the Unitree sport controller (2026-10-17). In control: the 384-D latent of the Phoenix walking policy model_2750 while it controlled the robot for one stand and four 2 s walks (2026-10-17), plus offline fault replay on those recordings |
 | Hardware validation | Partial. Shadow-mode onboard build, CPU cost, nominal health output, time to software `STOP` for `freeze_obs`, `stop`, `freeze_sensors`, and, during scripted walking, `freeze_sensors`, `gyro_stuck` and `joint_stuck`; 352 s of scripted walking, turning and stopping with no alarm ([On a real robot](#on-a-real-robot)). With the Phoenix walking policy in control (advisory PHM on its own latent): 1 stand drill and 4 short forward walks with 0 false alarms, and synthetic faults replayed offline on those recordings. Not done: a policy-driven stand-up, longer or turning walks with a policy in control, a fault while the policy is in control, a real (not induced) failure, physical recovery, early warning before a behavioral failure |
 | Release | 0.2.0 (2026-10-06): the C++ runtime and the first onboard GO2 session; see [CHANGELOG.md](CHANGELOG.md) |
 

@@ -13,7 +13,39 @@ All notable changes to this project are documented here. Format loosely follows
   the offline replay (`--fault freeze_sensors`) and the session script (`FAULTS`
   variable, kind `sensors`, default `freeze stop` unchanged). `phm_go2_summarize` emits
   `fault_sensors` and `phm_go2_plot` writes `go2_sensors_fault.svg` only when such trials
-  exist. Not yet run on the robot.
+  exist. Run on the robot on 2026-10-09 (one trial) and 2026-10-17 (5 standing and 5
+  walking trials, shadow mode); results in the README.
+- `phm_core::StaleSignalAdapter`: flags a sensor channel group that repeats exactly for
+  more than a set number of ticks. The GO2 shadow node runs it on the gyroscope and on each
+  joint's q and dq with `stale_check:=true` (limits `stale_gyro_max_repeats` 5,
+  `stale_joint_max_repeats` 12 ticks) and publishes its verdicts on `/phm/verdicts`
+  (source `stale:/lowstate`). It detects exactly held values only.
+- `phm_go2_stale_monitor`: the same stale-input check on live `/lowstate` without a shadow
+  policy.
+- Two partial shadow faults, `gyro_stuck` and `joint_stuck` (front-left calf q and dq),
+  and the session-script switches `FAULTS` kinds `gyro` and `joint` and `STALE_CHECK`.
+- `phm_detectors_node` parameter `dead_startup_grace_sec` (default 0, unchanged
+  behavior): no dead-topic verdict for a topic not yet seen until this long after startup.
+  The GO2 configs use 5 s; every earlier session raised dead-topic alerts during DDS
+  discovery.
+- `phoenix_live_session.sh` and `phm_go2_phoenix_detectors.yaml`: PHM beside a
+  go2-phoenix policy that is in control of the robot, scoring the policy's own published
+  latent with a fixed threshold. Advisory only: no shadow policy, no `phm_recovery`, and
+  nothing it publishes is read by the policy. Stops on `<out_dir>/STOP`; `BAG_EXTRA` adds
+  topics to the recording.
+- `phm_go2_ood_replay` and `phm_go2_stale_replay`: the deployed latent detector and
+  stale-input check run offline on arrays in an `.npz`, for labeled fault replay.
+
+### Hardware results (documented in the README)
+- 2026-10-09: live-sensor shadow check, one `freeze_sensors` trial.
+- 2026-10-17, shadow mode, robot walking under the Unitree sport controller: 352 s of
+  scripted walking, turning and stopping with no alarm; `freeze_sensors`, `gyro_stuck`
+  and `joint_stuck` while walking, 5 trials each.
+- 2026-10-17, the Phoenix walking policy model_2750 in control (scripted stand-up ramp,
+  then a policy stand and four 2 s walks at 0.3 m/s): PHM advisory on the policy's own
+  latent, 0 of 2,445 latent and 0 of 2,451 stale-check verdicts violating. Faults for
+  these runs, including drift, clipping, noisy holds and spikes, were replayed offline;
+  neither detector caught the non-exact faults.
 
 ## [0.2.0] - 2026-10-06
 
