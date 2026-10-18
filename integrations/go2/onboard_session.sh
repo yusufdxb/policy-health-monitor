@@ -27,7 +27,10 @@ NOM_SEC="${NOM_SEC:-120}"
 TRIALS="${TRIALS:-1}"
 FAULT_SEC="${FAULT_SEC:-45}"
 FAULT_AT="${FAULT_AT:-20}"
-FAULTS="${FAULTS:-freeze stop}"  # fault kinds per trial round, in order: freeze stop sensors
+FAULTS="${FAULTS:-freeze stop}"  # fault kinds per trial round, in order: freeze stop sensors gyro joint
+# 1: the embedder also runs its stale-input check (stale_check) and publishes
+# its verdicts; 0 keeps the original detector set.
+STALE_CHECK="${STALE_CHECK:-0}"
 WINDOW="${WINDOW:-30}"
 PERCENTILE="${PERCENTILE:-1.0}"
 MIN_CONSEC="${MIN_CONSEC:-3}"
@@ -38,12 +41,14 @@ MIN_CONSEC="${MIN_CONSEC:-3}"
 ARB_STALENESS="${ARB_STALENESS:-1.5}"
 export PHM_BACKEND="${PHM_BACKEND:-plain}"  # plain measured about 2x faster than eigen on the GO2
 
-# Embedder fault mode of a fault kind (freeze | stop | sensors).
+# Embedder fault mode of a fault kind (freeze | stop | sensors | gyro | joint).
 fault_mode() {
   case "$1" in
     freeze) echo freeze_obs ;;
     stop) echo stop ;;
     sensors) echo freeze_sensors ;;
+    gyro) echo gyro_stuck ;;
+    joint) echo joint_stuck ;;
     *) return 1 ;;
   esac
 }
@@ -51,12 +56,12 @@ fault_mode() {
 # Validate FAULTS before anything starts.
 read -r -a FAULT_KINDS <<<"$FAULTS"
 if [ "${#FAULT_KINDS[@]}" -eq 0 ]; then
-  echo "FAULTS is empty; use any of: freeze stop sensors" >&2
+  echo "FAULTS is empty; use any of: freeze stop sensors gyro joint" >&2
   exit 2
 fi
 for kind in "${FAULT_KINDS[@]}"; do
   if ! fault_mode "$kind" >/dev/null; then
-    echo "unknown fault kind '$kind' in FAULTS='$FAULTS'; valid kinds: freeze stop sensors" >&2
+    echo "unknown fault kind '$kind' in FAULTS='$FAULTS'; valid kinds: freeze stop sensors gyro joint" >&2
     exit 2
   fi
   if [ "$(printf '%s\n' "${FAULT_KINDS[@]}" | grep -cx -- "$kind")" -ne 1 ]; then
@@ -107,9 +112,11 @@ cpu_seconds() {  # cumulative CPU seconds (user + system) of every process in gr
 }
 trap cleanup EXIT
 
-start_embedder() {  # $1 = fault (none | freeze_obs | freeze_sensors | stop), $2 = log name
+start_embedder() {  # $1 = embedder fault mode (see fault_mode), $2 = log name
+  local stale=false
+  [ "$STALE_CHECK" = 1 ] && stale=true
   setsid "$EMBEDDER" --ros-args \
-    -p onnx_path:="$ONNX" -p stats_every_sec:=10.0 \
+    -p onnx_path:="$ONNX" -p stats_every_sec:=10.0 -p stale_check:="$stale" \
     -p fault:="$1" -p fault_after_sec:="$(printf '%.1f' "$FAULT_AT")" >"$OUT/$2" 2>&1 &
   EMB_PID=$!
   sleep 3
@@ -133,7 +140,7 @@ stop_embedder() {
   echo "onnx $(sha256sum "$ONNX" | cut -c1-16)"
   echo "CAL_SEC=$CAL_SEC NOM_SEC=$NOM_SEC FAULT_SEC=$FAULT_SEC FAULT_AT=$FAULT_AT"
   echo "WINDOW=$WINDOW PERCENTILE=$PERCENTILE MIN_CONSEC=$MIN_CONSEC ARB_STALENESS=$ARB_STALENESS"
-  echo "TRIALS=$TRIALS PHM_BACKEND=$PHM_BACKEND FAULTS=$FAULTS"
+  echo "TRIALS=$TRIALS PHM_BACKEND=$PHM_BACKEND FAULTS=$FAULTS STALE_CHECK=$STALE_CHECK"
   echo "phm $(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 } >"$OUT/session.txt"
 

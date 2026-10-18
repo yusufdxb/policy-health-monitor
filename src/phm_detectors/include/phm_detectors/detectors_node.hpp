@@ -57,6 +57,7 @@ private:
     double window_start = 0.0;
     int64_t count = 0;
     double last_seen = 0.0;
+    bool seen = false;  // at least one message has arrived
     rclcpp::GenericSubscription::SharedPtr sub;
   };
   struct Threshold
@@ -78,6 +79,8 @@ private:
   std::map<std::string, Watch> watches_;
   phm_core::SystemMetricsReader metrics_;
   std::map<std::string, double> last_log_;  // per-adapter warning throttle
+  double start_sec_ = 0.0;                  // node construction, monotonic
+  double dead_grace_ = 0.0;                 // dead_startup_grace_sec
 
   rclcpp::Publisher<phm_msgs::msg::DetectorVerdict>::SharedPtr pub_;
   rclcpp::TimerBase::SharedPtr timer_;

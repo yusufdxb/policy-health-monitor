@@ -11,6 +11,8 @@
 //                                   (BlackBoxRS anomaly_engine/detectors/dead_topic.py)
 //   RecurrentTemporalSpreadAdapter  policy recurrent feature freezes (rolling
 //                                   spread collapses), supercombo-blindspot E6
+//   StaleSignalAdapter              a group of input channels repeats the exact
+//                                   same values for too many samples in a row
 #ifndef PHM_CORE__ADAPTERS_HPP_
 #define PHM_CORE__ADAPTERS_HPP_
 
@@ -50,6 +52,21 @@ struct RecurrentSpreadSample
 {
   std::string topic;
   std::vector<double> embedding;
+};
+
+struct StaleSignalSample
+{
+  std::string topic;
+  std::vector<double> values;
+};
+
+// Channels of a StaleSignalSample checked together: the group is stale on a
+// sample when every one of its channels equals (==) its previous value.
+struct StaleGroup
+{
+  std::string name;
+  std::vector<std::size_t> channels;
+  int max_repeats = 1;  // longest healthy run of stale samples allowed
 };
 
 // Learning samples averaged into the frequency baseline (frequency.py:20).
@@ -135,6 +152,29 @@ private:
   std::vector<std::vector<double>> buffer_;
   bool has_spread_ = false;
   double last_spread_ = 0.0;
+};
+
+// Fires when any group's run of consecutive stale samples exceeds its
+// max_repeats, as a sensor channel stuck on its last value while the policy
+// keeps acting. The run itself is the debounce, so there is no hysteresis.
+// Reports the group with the highest run / max_repeats. Score
+// normalize(run, 0, 2 * max_repeats): INTERVENE on the first breach, STOP by
+// 1.6 x max_repeats. Throws std::invalid_argument for an empty group list, an
+// empty group or max_repeats < 1, and on a sample too short for a channel.
+class StaleSignalAdapter : public Detector<StaleSignalSample>
+{
+public:
+  StaleSignalAdapter(const std::string & target_topic, std::vector<StaleGroup> groups);
+  std::optional<VerdictData> update(const StaleSignalSample & sample) override;
+  // Current stale run of group g (0 when its last sample changed).
+  int run(std::size_t g) const {return runs_.at(g);}
+  const std::vector<StaleGroup> & groups() const {return groups_;}
+
+private:
+  std::vector<StaleGroup> groups_;
+  std::vector<int> runs_;
+  std::vector<double> prev_;
+  bool has_prev_ = false;
 };
 
 }  // namespace phm_core

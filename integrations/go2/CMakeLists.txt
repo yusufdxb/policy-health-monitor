@@ -58,7 +58,12 @@ add_executable(phm_go2_summarize tools/summarize_session.cpp)
 target_link_libraries(phm_go2_summarize phm_go2_session)
 add_executable(phm_go2_plot tools/plot_session.cpp)
 target_link_libraries(phm_go2_plot phm_go2_session)
-install(TARGETS phm_go2_summarize phm_go2_plot DESTINATION ${PHM_GO2_BIN})
+add_executable(phm_go2_ood_replay tools/ood_replay.cpp)
+target_link_libraries(phm_go2_ood_replay phm_core::phm_core)
+add_executable(phm_go2_stale_replay tools/stale_replay.cpp)
+target_link_libraries(phm_go2_stale_replay phm_core::phm_core)
+install(TARGETS phm_go2_summarize phm_go2_plot phm_go2_ood_replay phm_go2_stale_replay
+  DESTINATION ${PHM_GO2_BIN})
 
 # ---------------------------------------------------------------------------
 # ONNX Runtime layer
@@ -102,6 +107,12 @@ if(PHM_GO2_AMENT)
   install(TARGETS phm_go2_probe DESTINATION ${PHM_GO2_BIN})
 
   find_package(unitree_go QUIET)
+  if(unitree_go_FOUND)
+    add_executable(phm_go2_stale_monitor src/stale_monitor_node.cpp)
+    target_link_libraries(phm_go2_stale_monitor phm_go2_shadow phm_core::phm_core)
+    ament_target_dependencies(phm_go2_stale_monitor phm_msgs rclcpp unitree_go)
+    install(TARGETS phm_go2_stale_monitor DESTINATION ${PHM_GO2_BIN})
+  endif()
   if(PHM_GO2_HAVE_ORT AND unitree_go_FOUND)
     add_executable(phoenix_shadow_embedder src/shadow_embedder_node.cpp)
     target_link_libraries(phoenix_shadow_embedder phm_go2_policy phm_core::phm_core)
@@ -113,8 +124,9 @@ if(PHM_GO2_AMENT)
     message(STATUS "phm_go2: phoenix_shadow_embedder needs ONNX Runtime and unitree_go "
       "(source the unitree_ros2 workspace); not built")
   endif()
-  install(FILES phm_go2_detectors.yaml DESTINATION share/${PROJECT_NAME})
-  install(PROGRAMS onboard_session.sh preflight.sh DESTINATION share/${PROJECT_NAME})
+  install(FILES phm_go2_detectors.yaml phm_go2_phoenix_detectors.yaml DESTINATION share/${PROJECT_NAME})
+  install(PROGRAMS onboard_session.sh phoenix_live_session.sh preflight.sh
+    DESTINATION share/${PROJECT_NAME})
 endif()
 
 # ---------------------------------------------------------------------------
